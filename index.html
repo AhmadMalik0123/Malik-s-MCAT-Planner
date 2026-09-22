@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#142033">
+  <title>MCAT Prep Calculator</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">MCAT / PREP CALCULATOR</div>
+    <div id="account-bar" class="account-bar hidden">
+      <span id="account-email" class="account-email"></span>
+      <span id="sync-status" class="sync-status"></span>
+      <button id="sign-out" type="button" class="btn ghost">Sign out</button>
+    </div>
+    <nav id="app-nav" class="hidden">
+      <button data-view="today">Today</button>
+      <button data-view="setup">Setup</button>
+      <button data-view="calendar">Calendar</button>
+      <button data-view="progress">Progress</button>
+      <button data-action="export">Export</button>
+      <label class="import-control">Import<input id="import-data" type="file" accept="application/json"></label>
+    </nav>
+  </header>
+
+  <section id="auth-screen" class="auth-screen">
+    <form id="auth-form" class="auth-card">
+      <h1>Sign in to your plan</h1>
+      <p class="muted">Create an account so your calendar and progress are saved to you and available on any device.</p>
+      <label>Email<input id="auth-email" type="email" required autocomplete="email"></label>
+      <label>Password<input id="auth-password" type="password" required minlength="6" autocomplete="current-password"></label>
+      <button type="submit" id="auth-submit" class="btn primary full">Sign in</button>
+      <button type="button" id="auth-toggle" class="btn link">Need an account? Sign up</button>
+      <p id="auth-message" class="auth-message" role="status"></p>
+    </form>
+  </section>
+
+  <main id="app" class="shell hidden">
+    <section id="today" class="view"></section>
+    <section id="setup" class="view hidden"></section>
+    <section id="calendar" class="view hidden"></section>
+    <section id="progress" class="view hidden"></section>
+  </main>
+  <div id="toast" class="toast" role="status"></div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="supabase-config.js"></script>
+  <script src="auth.js"></script>
+</body>
+</html>
