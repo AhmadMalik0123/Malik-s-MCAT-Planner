@@ -78,7 +78,7 @@ async function pullFromCloud() {
 function setSyncStatus(text) { if (syncStatus) syncStatus.textContent = text; }
 
 function loadPlannerApp() {
-  if (appScriptLoaded) { location.reload(); return; }
+  if (appScriptLoaded) return;
   appScriptLoaded = true;
   const script = document.createElement("script");
   script.src = "app.js";
@@ -101,13 +101,17 @@ function showAuthScreen() {
   accountBar.classList.add("hidden");
 }
 
+let sessionHandled = false;
+
 async function handleSession(session) {
   if (session?.user) {
+    if (sessionHandled) return;
+    sessionHandled = true;
     currentUser = session.user;
     await pullFromCloud();
     showApp();
     loadPlannerApp();
-  } else {
+  } else if (!appScriptLoaded) {
     currentUser = null;
     showAuthScreen();
   }
@@ -154,5 +158,5 @@ document.querySelector("#sign-out").addEventListener("click", async () => {
   location.reload();
 });
 
-supabaseClient.auth.onAuthStateChange((_event, session) => { if (!appScriptLoaded) handleSession(session); });
+supabaseClient.auth.onAuthStateChange((_event, session) => { handleSession(session); });
 supabaseClient.auth.getSession().then(({ data }) => handleSession(data.session));
