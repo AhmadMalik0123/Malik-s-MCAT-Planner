@@ -63,7 +63,16 @@ async function pushToCloud(value) {
 async function pullFromCloud() {
   const { data, error } = await supabaseClient.from(PLANS_TABLE).select("data").eq("user_id", currentUser.id).maybeSingle();
   if (error) { console.error("Cloud load failed", error); return; }
-  if (data?.data) nativeSetItem.call(window.localStorage, `${STORAGE_KEY}::${currentUser.id}`, JSON.stringify(data.data));
+  if (data?.data) {
+    nativeSetItem.call(window.localStorage, `${STORAGE_KEY}::${currentUser.id}`, JSON.stringify(data.data));
+    return;
+  }
+  // No cloud plan yet for this account: adopt any pre-login plan sitting in this browser instead of starting blank.
+  const legacyPlan = nativeGetItem.call(window.localStorage, STORAGE_KEY);
+  if (legacyPlan) {
+    nativeSetItem.call(window.localStorage, `${STORAGE_KEY}::${currentUser.id}`, legacyPlan);
+    await pushToCloud(legacyPlan);
+  }
 }
 
 function setSyncStatus(text) { if (syncStatus) syncStatus.textContent = text; }
