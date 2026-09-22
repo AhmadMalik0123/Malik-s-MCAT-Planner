@@ -23,6 +23,70 @@ function loadState() {
 }
 function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
 function exportPlan() { const exportData = { exportedAt: new Date().toISOString(), setup: { examDate: state.examDate, fullLengthDay: state.fullLengthDay, breaks: state.breaks, unavailable: state.unavailable, targets: state.targets }, calendar: { fullLengths: state.fullLengths, tasks: state.tasks }, progress: { completed: state.completed, fullLengthScores: state.fullLengthScores, fullLengthSectionScores: state.fullLengthSectionScores, reviews: state.reviews } }; const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" }); const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = "mcat-calendar-progress.json"; link.click(); URL.revokeObjectURL(link.href); showToast("Calendar and progress exported."); }
+function exportCalendarView() {
+  const exam = parseDate(state.examDate);
+  const allDates = [...new Set([...Object.keys(state.tasks), ...Object.keys(state.fullLengths)])].sort();
+  if (!exam || !allDates.length) return showToast("Generate a calendar first.");
+  const win = window.open("", "_blank");
+  if (!win) return showToast("Allow pop-ups to export the calendar.");
+  const firstMonth = firstOfMonth(parseDate(allDates[0]));
+  const lastMonth = firstOfMonth(exam);
+  const months = [];
+  for (let cursor = firstMonth; cursor <= lastMonth; cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1, 12)) months.push(cursor);
+  const legendChips = [...Object.entries(COLORS), ["Full-length exam", "#4f46e5"], ["Break / unavailable", "#64748b"]]
+    .map(([label, color]) => `<span class="legend-chip"><span class="legend-dot" style="background:${color}"></span>${esc(label)}</span>`).join("");
+  const monthsHtml = months.map(month => calendarMonthBlock(month, exam)).join("");
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>MCAT Study Calendar</title><style>${CALENDAR_EXPORT_CSS}</style></head><body>
+    <header class="print-head"><h1>Malik's MCAT Planner</h1><p>Study calendar through ${formatDate(exam)}</p><button class="print-btn no-print" onclick="window.print()">Print / Save as PDF</button></header>
+    <div class="legend">${legendChips}</div>
+    ${monthsHtml}
+  </body></html>`);
+  win.document.close();
+}
+function calendarMonthBlock(month, exam) {
+  const first = firstOfMonth(month);
+  const start = addDays(first, -((first.getDay() + 6) % 7));
+  let cells = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(day => `<div class="wk">${day}</div>`).join("");
+  for (let i = 0; i < 42; i++) {
+    const date = addDays(start, i);
+    const key = dateKey(date);
+    const outside = date.getMonth() !== month.getMonth();
+    const special = state.fullLengths[key];
+    const tasks = state.tasks[key] || [];
+    let chips = tasks.map(task => `<div class="chip" style="border-left-color:${task.section === "Jack Westin" ? "#475569" : (COLORS[task.section] || "#94a3b8")}">${esc(task.label)}</div>`).join("");
+    if (special) chips = `<div class="chip special">${esc(special)}</div>`;
+    if (exam && key === dateKey(addDays(exam, -1))) chips = `<div class="chip break">Break</div>`;
+    cells += `<div class="cell ${outside ? "outside" : ""} ${key === dateKey(exam) ? "examday" : ""}"><div class="num">${date.getDate()}</div>${chips}</div>`;
+  }
+  return `<section class="month"><h2>${esc(month.toLocaleDateString(undefined, { month: "long", year: "numeric" }))}</h2><div class="grid">${cells}</div></section>`;
+}
+const CALENDAR_EXPORT_CSS = `
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: #f4f7fb; color: #111827; font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .print-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+  .print-head h1 { margin: 0; font-size: 22px; color: #142033; }
+  .print-head p { margin: 2px 0 0; color: #64748b; font-size: 12px; }
+  .print-btn { border: 0; border-radius: 7px; padding: 10px 16px; background: #4f46e5; color: white; font-weight: 700; cursor: pointer; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-bottom: 18px; padding: 10px 14px; background: white; border: 1px solid #dce4ec; border-radius: 8px; }
+  .legend-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: #334155; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .month { background: white; border: 1px solid #dce4ec; border-radius: 10px; padding: 16px; margin-bottom: 22px; page-break-inside: avoid; }
+  .month h2 { margin: 0 0 12px; font-size: 17px; color: #142033; }
+  .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .wk { text-align: center; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #64748b; padding-bottom: 4px; }
+  .cell { min-height: 92px; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px; background: #fbfdff; }
+  .cell.outside { background: #f1f5f9; opacity: .55; }
+  .cell.examday { border: 2px solid #4f46e5; }
+  .num { font-size: 11px; font-weight: 800; color: #334155; margin-bottom: 3px; }
+  .chip { font-size: 9.5px; font-weight: 700; color: #1f2937; background: #eef2ff; border-left: 3px solid #94a3b8; border-radius: 3px; padding: 2px 4px; margin-bottom: 3px; }
+  .chip.special { border-left-color: #4f46e5; background: #e0e7ff; color: #312e81; }
+  .chip.break { border-left-color: #64748b; background: #f1f5f9; color: #334155; }
+  @media print {
+    body { background: white; padding: 0; }
+    .no-print { display: none; }
+    .month { page-break-after: always; border: none; }
+  }
+`;
 function importPlan(file) { const reader = new FileReader(); reader.onload = () => { try { const imported = JSON.parse(reader.result); state = imported.setup ? { ...state, ...imported.setup, fullLengths: imported.calendar?.fullLengths || {}, tasks: imported.calendar?.tasks || {}, completed: imported.progress?.completed || {}, fullLengthScores: imported.progress?.fullLengthScores || {}, fullLengthSectionScores: imported.progress?.fullLengthSectionScores || {}, reviews: imported.progress?.reviews || [] } : imported; state.fullLengthScores ||= {}; state.fullLengthSectionScores ||= {}; state.reviews ||= []; defaultTargets(); saveState(); render(); showToast("Plan imported."); } catch { showToast("That file is not a valid MCAT plan."); } }; reader.readAsText(file); }
 function normalizeFullLengthLabels() { let changed = false; Object.keys(state.fullLengths).forEach(key => { const label = state.fullLengths[key]; if (/^FL \d+$/.test(label)) { state.fullLengths[key] = label.replace("FL ", "FL"); changed = true; } }); if (changed) saveState(); }
 function fullLengthEntries() { const entries = Object.entries(state.fullLengths).filter(([, label]) => label !== "MCAT EXAM" && label !== "Unscored"); const byLabel = new Map(entries.map(entry => [entry[1], entry])); const exam = parseDate(state.examDate); if (exam) { const dayNumber = DAY_NAMES.indexOf(state.fullLengthDay); for (let i = 1; i <= 6; i++) { const label = `FL${i}`; if (byLabel.has(label)) continue; let date = addDays(exam, -(49 - i * 7)); while (date.getDay() !== dayNumber) date = addDays(date, -1); byLabel.set(label, [dateKey(date), label]); } } return [...byLabel.values()].sort(([first], [second]) => first.localeCompare(second)); }
@@ -177,7 +241,7 @@ function progressCard(title, group, accent) { const groupTotal = Object.values(g
 function recordCompletedTasks() { Object.values(state.tasks).flat().forEach(task => { if (!task.done || task.counted || !/^\d+ questions$/.test(task.detail)) return; const amount = Number(task.detail.match(/\d+/)[0]); const total = TOTALS.uworld[task.section] || TOTALS.aamc[task.section] || 0; state.completed[task.section] = Math.min(total, completedFor(task.section) + amount); task.counted = true; }); }
 function updateCalendar() { if (!state.examDate || !Object.keys(state.tasks).length) return showToast("Generate a calendar first."); recordCompletedTasks(); document.querySelectorAll("[data-completed]").forEach(input => state.completed[input.dataset.completed] = Math.max(0, Math.min(Number(input.max), Number(input.value) || 0))); saveState(); generatePlan(); showToast("Calendar updated from completed work."); }
 
-document.addEventListener("click", event => { const view = event.target.closest("[data-view]"); if (view) { currentView = view.dataset.view; render(); return; } const link = event.target.closest("[data-link]"); if (link) window.open(link.dataset.link, "_blank", "noopener"); const action = event.target.closest("[data-action]"); if (action?.dataset.action === "generate") generatePlan(); if (action?.dataset.action === "update") updateCalendar(); if (action?.dataset.action === "export") exportPlan(); const month = event.target.closest("[data-month]"); if (month) { displayedMonth = new Date(displayedMonth.getFullYear(), displayedMonth.getMonth() + Number(month.dataset.month), 1, 12); renderCalendar(); } });
+document.addEventListener("click", event => { const view = event.target.closest("[data-view]"); if (view) { currentView = view.dataset.view; render(); return; } const link = event.target.closest("[data-link]"); if (link) window.open(link.dataset.link, "_blank", "noopener"); const action = event.target.closest("[data-action]"); if (action?.dataset.action === "generate") generatePlan(); if (action?.dataset.action === "update") updateCalendar(); if (action?.dataset.action === "export") exportPlan(); if (action?.dataset.action === "export-calendar") exportCalendarView(); const month = event.target.closest("[data-month]"); if (month) { displayedMonth = new Date(displayedMonth.getFullYear(), displayedMonth.getMonth() + Number(month.dataset.month), 1, 12); renderCalendar(); } });
 document.addEventListener("change", event => { if (event.target.matches("[data-task-date]")) { const task = state.tasks[event.target.dataset.taskDate]?.[Number(event.target.dataset.taskIndex)]; if (task) { task.done = event.target.checked; saveState(); showToast(event.target.checked ? "Task marked complete." : "Task reopened."); } } });
 document.addEventListener("change", event => { if (event.target.matches("[data-completed]")) { state.completed[event.target.dataset.completed] = Math.max(0, Math.min(Number(event.target.max), Number(event.target.value) || 0)); saveState(); renderToday(); } });
 document.addEventListener("change", event => { if (event.target.matches("[data-score-date]")) { const score = Number(event.target.value); if (event.target.value === "") delete state.fullLengthScores[event.target.dataset.scoreDate]; else state.fullLengthScores[event.target.dataset.scoreDate] = Math.max(0, Math.min(528, score || 0)); saveState(); renderProgress(); enhanceSubsectionScores(); enhanceMainScoreGraph(); showToast("Full-length score saved."); } });
