@@ -1,7 +1,7 @@
 // Handles account signup/login and syncs the planner's saved state (normally
 // just localStorage) to a per-user row in Supabase, so each person's plan
 // follows their account instead of staying stuck in one browser.
-const STORAGE_KEY = "mcat-prep-plan-v1";
+const PLAN_STORAGE_KEY = "mcat-prep-plan-v1";
 const PLANS_TABLE = "plans";
 
 const supabaseClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
@@ -29,14 +29,14 @@ let authMode = "signin";
 const nativeGetItem = Storage.prototype.getItem;
 const nativeSetItem = Storage.prototype.setItem;
 Storage.prototype.getItem = function (key) {
-  if (this === window.localStorage && key === STORAGE_KEY && currentUser) {
-    return nativeGetItem.call(this, `${STORAGE_KEY}::${currentUser.id}`);
+  if (this === window.localStorage && key === PLAN_STORAGE_KEY && currentUser) {
+    return nativeGetItem.call(this, `${PLAN_STORAGE_KEY}::${currentUser.id}`);
   }
   return nativeGetItem.call(this, key);
 };
 Storage.prototype.setItem = function (key, value) {
-  if (this === window.localStorage && key === STORAGE_KEY && currentUser) {
-    nativeSetItem.call(this, `${STORAGE_KEY}::${currentUser.id}`, value);
+  if (this === window.localStorage && key === PLAN_STORAGE_KEY && currentUser) {
+    nativeSetItem.call(this, `${PLAN_STORAGE_KEY}::${currentUser.id}`, value);
     queueCloudSync(value);
     return;
   }
@@ -64,13 +64,13 @@ async function pullFromCloud() {
   const { data, error } = await supabaseClient.from(PLANS_TABLE).select("data").eq("user_id", currentUser.id).maybeSingle();
   if (error) { console.error("Cloud load failed", error); return; }
   if (data?.data) {
-    nativeSetItem.call(window.localStorage, `${STORAGE_KEY}::${currentUser.id}`, JSON.stringify(data.data));
+    nativeSetItem.call(window.localStorage, `${PLAN_STORAGE_KEY}::${currentUser.id}`, JSON.stringify(data.data));
     return;
   }
   // No cloud plan yet for this account: adopt any pre-login plan sitting in this browser instead of starting blank.
-  const legacyPlan = nativeGetItem.call(window.localStorage, STORAGE_KEY);
+  const legacyPlan = nativeGetItem.call(window.localStorage, PLAN_STORAGE_KEY);
   if (legacyPlan) {
-    nativeSetItem.call(window.localStorage, `${STORAGE_KEY}::${currentUser.id}`, legacyPlan);
+    nativeSetItem.call(window.localStorage, `${PLAN_STORAGE_KEY}::${currentUser.id}`, legacyPlan);
     await pushToCloud(legacyPlan);
   }
 }
