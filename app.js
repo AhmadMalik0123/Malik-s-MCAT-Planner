@@ -379,6 +379,13 @@ function buildTasks(exam) {
   days.forEach((date, index) => {
     if (!(tasks[dateKey(date)] || []).some(task => task.section === "AAMC CARS")) addTask(tasks, date, "Jack Westin", `${index === 0 ? 2 : 3} passages`);
   });
+  // daily Anki flashcard review runs the whole prep period, stopping once the exam's final week begins
+  const ankiCutoff = addDays(exam, -7);
+  const ankiEnd = days.filter(date => date < ankiCutoff).length;
+  days.forEach((date, index) => {
+    if (index >= ankiEnd) return;
+    addTask(tasks, date, "Anki Review", "Daily flashcards");
+  });
   return tasks;
 }
 function addTask(tasks, date, section, detail) { const key = dateKey(date); if (!tasks[key]) tasks[key] = []; tasks[key].push({ date: key, section, label: `${section}: ${detail}`, detail, done: false, index: tasks[key].length }); }
