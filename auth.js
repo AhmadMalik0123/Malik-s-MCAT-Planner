@@ -21,6 +21,7 @@ const authEmail = document.querySelector("#auth-email");
 const authPassword = document.querySelector("#auth-password");
 const authSubmit = document.querySelector("#auth-submit");
 const authToggle = document.querySelector("#auth-toggle");
+const authForgot = document.querySelector("#auth-forgot");
 const authMessage = document.querySelector("#auth-message");
 let authMode = "signin";
 
@@ -120,9 +121,19 @@ async function handleSession(session) {
 function setAuthMode(mode) {
   authMode = mode;
   authMessage.textContent = "";
+  authPassword.closest("label").classList.toggle("hidden", mode === "forgot");
+  authPassword.required = mode !== "forgot";
+  authForgot.classList.toggle("hidden", mode !== "signin");
+  authToggle.classList.toggle("hidden", mode === "reset");
   if (mode === "signup") {
     authSubmit.textContent = "Sign up";
     authToggle.textContent = "Already have an account? Sign in";
+  } else if (mode === "forgot") {
+    authSubmit.textContent = "Send reset link";
+    authToggle.textContent = "Back to sign in";
+  } else if (mode === "reset") {
+    authSubmit.textContent = "Set new password";
+    authPassword.placeholder = "New password";
   } else {
     authSubmit.textContent = "Sign in";
     authToggle.textContent = "Need an account? Sign up";
@@ -130,6 +141,7 @@ function setAuthMode(mode) {
 }
 
 authToggle.addEventListener("click", () => setAuthMode(authMode === "signin" ? "signup" : "signin"));
+authForgot.addEventListener("click", () => setAuthMode(authMode === "forgot" ? "signin" : "forgot"));
 
 authForm.addEventListener("submit", async event => {
   event.preventDefault();
@@ -142,6 +154,16 @@ authForm.addEventListener("submit", async event => {
       const { data, error } = await supabaseClient.auth.signUp({ email, password });
       if (error) throw error;
       if (!data.session) authMessage.textContent = "Check your email to confirm your account, then sign in.";
+    } else if (authMode === "forgot") {
+      const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+      if (error) throw error;
+      authMessage.textContent = "Check your email for a password reset link.";
+    } else if (authMode === "reset") {
+      const { error } = await supabaseClient.auth.updateUser({ password });
+      if (error) throw error;
+      const { data } = await supabaseClient.auth.getSession();
+      await handleSession(data.session);
+      return;
     } else {
       const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
       if (error) throw error;
@@ -158,5 +180,13 @@ document.querySelector("#sign-out").addEventListener("click", async () => {
   location.reload();
 });
 
-supabaseClient.auth.onAuthStateChange((_event, session) => { handleSession(session); });
+supabaseClient.auth.onAuthStateChange((event, session) => {
+  if (event === "PASSWORD_RECOVERY") {
+    authScreen.classList.remove("hidden");
+    appEl.classList.add("hidden");
+    setAuthMode("reset");
+    return;
+  }
+  handleSession(session);
+});
 supabaseClient.auth.getSession().then(({ data }) => handleSession(data.session));
