@@ -39,8 +39,8 @@ function exportCombinedReport() {
   const legendChips = [...Object.entries(EXPORT_COLORS), ["Full-length exam", "#4f46e5"], ["Break / unavailable", "#64748b"]]
     .map(([label, color]) => `<span class="legend-chip"><span class="legend-dot" style="background:${color}"></span>${esc(label)}</span>`).join("");
   const monthsHtml = months.map(month => calendarMonthBlock(month, exam)).join("");
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Malik's and Carolina's MCAT Planner Export</title><style>${EXPORT_CSS}</style></head><body>
-    <header class="print-head"><h1>Malik's and Carolina's MCAT Planner</h1><p>Exported ${formatDate(new Date())} &mdash; calendar and progress through ${formatDate(exam)}</p><button class="print-btn no-print" onclick="window.print()">Print / Save as PDF</button></header>
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Malik and Carolina's MCAT Planner Export</title><style>${EXPORT_CSS}</style></head><body>
+    <header class="print-head"><h1>Malik and Carolina's MCAT Planner</h1><p>Exported ${formatDate(new Date())} &mdash; calendar and progress through ${formatDate(exam)}</p><button class="print-btn no-print" onclick="window.print()">Print / Save as PDF</button></header>
     <h2 class="export-h2">Study calendar</h2>
     <div class="legend">${legendChips}</div>
     ${monthsHtml}
