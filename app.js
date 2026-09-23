@@ -330,7 +330,7 @@ function buildTasks(exam) {
   const psSection = "UWorld P/S";
   const primaryUworldSections = uworldSections.filter(section => section !== psSection);
   const psRemaining = Math.max(0, targetFor(psSection) - completedFor(psSection));
-  const psDays = psRemaining ? Math.max(1, Math.min(uworldDays, Math.ceil(psRemaining / 75))) : 0;
+  const psDays = psRemaining ? Math.min(uworldDays, Math.max(7, Math.ceil(psRemaining / 40))) : 0;
   const psStart = uworldEnd - psDays;
   scheduleSections(primaryUworldSections, uworldStart, psStart);
   scheduleSections([psSection], psStart, uworldEnd);
@@ -339,6 +339,16 @@ function buildTasks(exam) {
     const count = Math.min(carsRate, remainingCars);
     addTask(tasks, days[i], "AAMC CARS", `${count} passages`);
     remainingCars -= count;
+  }
+  // once UWorld is done, light review reps keep the material fresh on days AAMC doesn't fill
+  const uworldHasContent = uworldSections.some(section => targetFor(section) > 0);
+  if (uworldHasContent) {
+    days.forEach((date, index) => {
+      if (index < uworldEnd) return;
+      const key = dateKey(date);
+      if ((tasks[key] || []).some(task => uworldSections.includes(task.section) || aamcSections.includes(task.section))) return;
+      addTask(tasks, date, "UWorld Review", "15 questions across all sections");
+    });
   }
   days.forEach((date, index) => {
     if (!(tasks[dateKey(date)] || []).some(task => task.section === "AAMC CARS")) addTask(tasks, date, "Jack Westin", `${index === 0 ? 2 : 3} passages`);
