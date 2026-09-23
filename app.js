@@ -24,25 +24,36 @@ function loadState() {
 let saveCountSinceReminder = 0;
 function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); if (++saveCountSinceReminder >= 40) { saveCountSinceReminder = 0; showToast("Tip: use Export Data occasionally to keep a backup of your plan."); } }
 function exportPlan() { const exportData = { exportedAt: new Date().toISOString(), setup: { examDate: state.examDate, fullLengthDay: state.fullLengthDay, breaks: state.breaks, unavailable: state.unavailable, targets: state.targets }, calendar: { fullLengths: state.fullLengths, tasks: state.tasks }, progress: { completed: state.completed, fullLengthScores: state.fullLengthScores, fullLengthSectionScores: state.fullLengthSectionScores, reviews: state.reviews } }; const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" }); const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = "mcat-calendar-progress.json"; link.click(); URL.revokeObjectURL(link.href); showToast("Calendar and progress exported."); }
-function exportCalendarView() {
+const EXPORT_COLORS = {
+  "UWorld C/P": "#2563eb", "UWorld B/B": "#059669", "UWorld CARS": "#c2410c", "UWorld P/S": "#7c3aed",
+  "AAMC Biology/Biochem.": "#0d9488", "AAMC C/P": "#dc2626", "AAMC Independent": "#d97706", "AAMC CARS": "#c2410c"
+};
+function exportCombinedReport() {
   const exam = parseDate(state.examDate);
   const allDates = [...new Set([...Object.keys(state.tasks), ...Object.keys(state.fullLengths)])].sort();
   if (!exam || !allDates.length) return showToast("Generate a calendar first.");
-  const win = window.open("", "_blank");
-  if (!win) return showToast("Allow pop-ups to export the calendar.");
   const firstMonth = firstOfMonth(parseDate(allDates[0]));
   const lastMonth = firstOfMonth(exam);
   const months = [];
   for (let cursor = firstMonth; cursor <= lastMonth; cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1, 12)) months.push(cursor);
-  const legendChips = [...Object.entries(COLORS), ["Full-length exam", "#4f46e5"], ["Break / unavailable", "#64748b"]]
+  const legendChips = [...Object.entries(EXPORT_COLORS), ["Full-length exam", "#4f46e5"], ["Break / unavailable", "#64748b"]]
     .map(([label, color]) => `<span class="legend-chip"><span class="legend-dot" style="background:${color}"></span>${esc(label)}</span>`).join("");
   const monthsHtml = months.map(month => calendarMonthBlock(month, exam)).join("");
-  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>MCAT Study Calendar</title><style>${CALENDAR_EXPORT_CSS}</style></head><body>
-    <header class="print-head"><h1>Malik's MCAT Planner</h1><p>Study calendar through ${formatDate(exam)}</p><button class="print-btn no-print" onclick="window.print()">Print / Save as PDF</button></header>
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Malik's MCAT Planner Export</title><style>${EXPORT_CSS}</style></head><body>
+    <header class="print-head"><h1>Malik's MCAT Planner</h1><p>Exported ${formatDate(new Date())} &mdash; calendar and progress through ${formatDate(exam)}</p><button class="print-btn no-print" onclick="window.print()">Print / Save as PDF</button></header>
+    <h2 class="export-h2">Study calendar</h2>
     <div class="legend">${legendChips}</div>
     ${monthsHtml}
-  </body></html>`);
-  win.document.close();
+    <h2 class="export-h2">Progress</h2>
+    ${buildProgressExportSection()}
+  </body></html>`;
+  const blob = new Blob([html], { type: "text/html" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "mcat-planner-export.html";
+  link.click();
+  URL.revokeObjectURL(link.href);
+  showToast("Calendar and progress exported.");
 }
 function calendarMonthBlock(month, exam) {
   const first = firstOfMonth(month);
@@ -54,20 +65,65 @@ function calendarMonthBlock(month, exam) {
     const outside = date.getMonth() !== month.getMonth();
     const special = state.fullLengths[key];
     const tasks = state.tasks[key] || [];
-    let chips = tasks.map(task => `<div class="chip" style="border-left-color:${task.section === "Jack Westin" ? "#475569" : (COLORS[task.section] || "#94a3b8")}">${esc(task.label)}</div>`).join("");
+    let chips = tasks.map(task => `<div class="chip" style="border-left-color:${task.section === "Jack Westin" ? "#475569" : (EXPORT_COLORS[task.section] || "#94a3b8")}">${esc(task.label)}</div>`).join("");
     if (special) chips = `<div class="chip special">${esc(special)}</div>`;
     if (exam && key === dateKey(addDays(exam, -1))) chips = `<div class="chip break">Break</div>`;
     cells += `<div class="cell ${outside ? "outside" : ""} ${key === dateKey(exam) ? "examday" : ""}"><div class="num">${date.getDate()}</div>${chips}</div>`;
   }
   return `<section class="month"><h2>${esc(month.toLocaleDateString(undefined, { month: "long", year: "numeric" }))}</h2><div class="grid">${cells}</div></section>`;
 }
-const CALENDAR_EXPORT_CSS = `
+function buildProgressExportSection() {
+  const completed = allSections().reduce((sum, section) => sum + completedFor(section), 0);
+  const total = allSections().reduce((sum, section) => sum + (TOTALS.uworld[section] || TOTALS.aamc[section] || 0), 0);
+  const pct = total ? Math.round(completed / total * 100) : 0;
+  const uworldRows = exportProgressRows(TOTALS.uworld);
+  const aamcRows = exportProgressRows(TOTALS.aamc);
+  const sections = [["C/P", "cp"], ["CARS", "cars"], ["B/B", "bb"], ["P/S", "ps"]];
+  const entries = fullLengthEntries();
+  const subsectionCharts = sections.map(([label, key]) => `<div class="export-card"><h3>${esc(label)} section score trend</h3>${sectionScoreGraph(entries, key, label)}</div>`).join("");
+  return `
+    <div class="export-card"><h3>Overall question completion: ${pct}%</h3><div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:#4f46e5"></div></div></div>
+    <div class="export-grid-2"><div class="export-card"><h3>UWorld</h3>${uworldRows}</div><div class="export-card"><h3>AAMC</h3>${aamcRows}</div></div>
+    <div class="export-card">${buildFullLengthExportChart()}</div>
+    <div class="export-grid-2">${subsectionCharts}</div>
+  `;
+}
+function exportProgressRows(group) {
+  return Object.entries(group).map(([section, total]) => {
+    const done = completedFor(section); const pct = total ? Math.min(100, Math.round(done / total * 100)) : 0;
+    const color = EXPORT_COLORS[section] || "#64748b";
+    return `<div class="progress-row"><div class="progress-head"><span style="color:${color}">${esc(section)}</span><span>${done} / ${total}</span></div><div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${color}"></div></div></div>`;
+  }).join("");
+}
+function buildFullLengthExportChart() {
+  const entries = fullLengthEntries();
+  const scoredEntries = entries.filter(([date]) => Number(fullLengthScores()[date]) >= 472);
+  const scores = scoredEntries.map(([date]) => Number(fullLengthScores()[date]));
+  const average = scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : "--";
+  const highest = scores.length ? Math.max(...scores) : "--";
+  const latest = scores.length ? scores.at(-1) : "--";
+  const chartWidth = 680, chartHeight = 220;
+  const chartMin = scores.length ? Math.max(472, Math.min(520, Math.floor((Math.min(...scores) - 4) / 2) * 2)) : 472;
+  const chartMax = scores.length ? Math.min(528, Math.max(chartMin + 8, Math.ceil((Math.max(...scores) + 4) / 2) * 2)) : 528;
+  const chartRange = chartMax - chartMin;
+  const points = entries.map(([date], index) => { const score = Number(fullLengthScores()[date]); return { x: 52 + index * (chartWidth - 72) / Math.max(entries.length - 1, 1), y: score >= 472 ? 202 - (Math.min(chartMax, score) - chartMin) / chartRange * 180 : null, score }; });
+  const bars = points.filter(point => point.y !== null).map(point => `<rect x="${point.x - 14}" y="${point.y}" width="28" height="${202 - point.y}" rx="4" class="score-bar"/>`).join("");
+  const line = points.filter(point => point.y !== null).map(point => `${point.x},${point.y}`).join(" ");
+  const dots = points.map((point, index) => point.y === null ? `<circle cx="${point.x}" cy="202" r="4" class="score-dot empty"/>` : `<circle cx="${point.x}" cy="${point.y}" r="6" class="score-dot"><title>${esc(entries[index][1])}: ${point.score}</title></circle>`).join("");
+  const labels = entries.map(([date, label], index) => `<text x="${points[index].x}" y="218" class="score-axis-label" text-anchor="middle">${esc(label)}</text>`).join("");
+  const grid = [0, 1, 2, 3, 4].map(index => { const score = Math.round(chartMin + chartRange * index / 4); const y = 202 - (score - chartMin) / chartRange * 180; return `<line x1="52" y1="${y}" x2="${chartWidth}" y2="${y}" class="score-grid-line"/><text x="44" y="${y + 4}" class="score-axis-value" text-anchor="end">${score}</text>`; }).join("");
+  const chart = `<svg class="score-chart" viewBox="0 0 ${chartWidth} ${chartHeight}"><g>${grid}<line x1="52" y1="22" x2="52" y2="202" class="score-axis-line"/><line x1="52" y1="202" x2="${chartWidth}" y2="202" class="score-axis-line"/>${bars}${line ? `<polyline points="${line}" class="score-trend-line"/>` : ""}${dots}${labels}</g></svg>`;
+  const table = entries.map(([date, label]) => `<tr><th scope="row">${esc(label)}</th><td>${formatDate(parseDate(date))}</td><td>${fullLengthScores()[date] >= 472 ? fullLengthScores()[date] : "--"}</td></tr>`).join("");
+  return `<h3>Full-length scores</h3><div class="score-stats"><span><strong>${scores.length}</strong><small>entered</small></span><span><strong>${average}</strong><small>average</small></span><span><strong>${highest}</strong><small>highest</small></span><span><strong>${latest}</strong><small>latest</small></span></div>${chart}<table class="score-table"><thead><tr><th>Exam</th><th>Date</th><th>Score</th></tr></thead><tbody>${table}</tbody></table>`;
+}
+const EXPORT_CSS = `
   * { box-sizing: border-box; }
   body { margin: 0; padding: 24px; background: #f4f7fb; color: #111827; font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
   .print-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
   .print-head h1 { margin: 0; font-size: 22px; color: #142033; }
   .print-head p { margin: 2px 0 0; color: #64748b; font-size: 12px; }
   .print-btn { border: 0; border-radius: 7px; padding: 10px 16px; background: #4f46e5; color: white; font-weight: 700; cursor: pointer; }
+  .export-h2 { margin: 26px 0 14px; font-size: 19px; color: #142033; }
   .legend { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-bottom: 18px; padding: 10px 14px; background: white; border: 1px solid #dce4ec; border-radius: 8px; }
   .legend-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: #334155; }
   .legend-dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
@@ -82,10 +138,33 @@ const CALENDAR_EXPORT_CSS = `
   .chip { font-size: 9.5px; font-weight: 700; color: #1f2937; background: #eef2ff; border-left: 3px solid #94a3b8; border-radius: 3px; padding: 2px 4px; margin-bottom: 3px; }
   .chip.special { border-left-color: #4f46e5; background: #e0e7ff; color: #312e81; }
   .chip.break { border-left-color: #64748b; background: #f1f5f9; color: #334155; }
+  .export-card { background: white; border: 1px solid #dce4ec; border-radius: 10px; padding: 16px; margin-bottom: 16px; page-break-inside: avoid; }
+  .export-card h3 { margin: 0 0 10px; font-size: 15px; color: #142033; }
+  .export-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .progress-row { margin-bottom: 10px; }
+  .progress-head { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+  .progress-track { height: 8px; border-radius: 5px; background: #e2e8f0; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 5px; }
+  .score-stats { display: flex; gap: 18px; margin-bottom: 10px; }
+  .score-stats strong { display: block; font-size: 18px; color: #142033; }
+  .score-stats small { color: #64748b; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+  .score-chart, .subsection-chart { display: block; width: 100%; height: auto; overflow: visible; }
+  .score-grid-line, .subsection-grid-line { stroke: #dce4ec; stroke-width: 1; stroke-dasharray: 3 4; }
+  .score-axis-line { stroke: #94a3b8; stroke-width: 1.2; }
+  .score-axis-value, .score-axis-label { fill: #64748b; font-size: 10px; font-weight: 700; }
+  .score-bar { fill: rgba(79, 70, 229, .2); stroke: rgba(79, 70, 229, .45); stroke-width: 1; }
+  .score-trend-line { fill: none; stroke: #e11d48; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+  .score-dot { fill: #fff; stroke: #e11d48; stroke-width: 3; }
+  .score-dot.empty { fill: #cbd5e1; stroke: #94a3b8; stroke-width: 2; }
+  .subsection-bar { fill: rgba(14, 116, 144, .18); stroke: rgba(14, 116, 144, .5); stroke-width: 1; }
+  .subsection-trend-line { fill: none; stroke: #0e7490; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+  .subsection-dot { fill: white; stroke: #0e7490; stroke-width: 3; }
+  .score-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 12px; }
+  .score-table th, .score-table td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #edf1f5; }
   @media print {
     body { background: white; padding: 0; }
     .no-print { display: none; }
-    .month { page-break-after: always; border: none; }
+    .month, .export-card { page-break-inside: avoid; }
   }
 `;
 function importPlan(file) { const reader = new FileReader(); reader.onload = () => { try { const imported = JSON.parse(reader.result); state = imported.setup ? { ...state, ...imported.setup, fullLengths: imported.calendar?.fullLengths || {}, tasks: imported.calendar?.tasks || {}, completed: imported.progress?.completed || {}, fullLengthScores: imported.progress?.fullLengthScores || {}, fullLengthSectionScores: imported.progress?.fullLengthSectionScores || {}, reviews: imported.progress?.reviews || [] } : imported; state.fullLengthScores ||= {}; state.fullLengthSectionScores ||= {}; state.reviews ||= []; defaultTargets(); saveState(); render(); showToast("Plan imported."); } catch { showToast("That file is not a valid MCAT plan."); } }; reader.readAsText(file); }
@@ -254,7 +333,7 @@ function progressCard(title, group, accent) { const groupTotal = Object.values(g
 function recordCompletedTasks() { Object.values(state.tasks).flat().forEach(task => { if (!task.done || task.counted || !/^\d+ questions$/.test(task.detail)) return; const amount = Number(task.detail.match(/\d+/)[0]); const total = TOTALS.uworld[task.section] || TOTALS.aamc[task.section] || 0; state.completed[task.section] = Math.min(total, completedFor(task.section) + amount); task.counted = true; }); }
 function updateCalendar() { if (!state.examDate || !Object.keys(state.tasks).length) return showToast("Generate a calendar first."); recordCompletedTasks(); document.querySelectorAll("[data-completed]").forEach(input => state.completed[input.dataset.completed] = Math.max(0, Math.min(Number(input.max), Number(input.value) || 0))); saveState(); generatePlan(); showToast("Calendar updated from completed work."); }
 
-document.addEventListener("click", event => { const view = event.target.closest("[data-view]"); if (view) { currentView = view.dataset.view; render(); return; } const link = event.target.closest("[data-link]"); if (link) window.open(link.dataset.link, "_blank", "noopener"); const action = event.target.closest("[data-action]"); if (action?.dataset.action === "generate") generatePlan(); if (action?.dataset.action === "update") updateCalendar(); if (action?.dataset.action === "export") exportPlan(); if (action?.dataset.action === "export-calendar") exportCalendarView(); const filter = event.target.closest("[data-review-filter]"); if (filter) { reviewFilter = filter.dataset.reviewFilter; renderReview(); } const month = event.target.closest("[data-month]"); if (month) { displayedMonth = new Date(displayedMonth.getFullYear(), displayedMonth.getMonth() + Number(month.dataset.month), 1, 12); renderCalendar(); } });
+document.addEventListener("click", event => { const view = event.target.closest("[data-view]"); if (view) { currentView = view.dataset.view; render(); return; } const link = event.target.closest("[data-link]"); if (link) window.open(link.dataset.link, "_blank", "noopener"); const action = event.target.closest("[data-action]"); if (action?.dataset.action === "generate") generatePlan(); if (action?.dataset.action === "update") updateCalendar(); if (action?.dataset.action === "export") exportPlan(); if (action?.dataset.action === "export-calendar") exportCombinedReport(); const filter = event.target.closest("[data-review-filter]"); if (filter) { reviewFilter = filter.dataset.reviewFilter; renderReview(); } const month = event.target.closest("[data-month]"); if (month) { displayedMonth = new Date(displayedMonth.getFullYear(), displayedMonth.getMonth() + Number(month.dataset.month), 1, 12); renderCalendar(); } });
 document.addEventListener("change", event => { if (event.target.matches("[data-task-date]")) { const task = state.tasks[event.target.dataset.taskDate]?.[Number(event.target.dataset.taskIndex)]; if (task) { task.done = event.target.checked; saveState(); showToast(event.target.checked ? "Task marked complete." : "Task reopened."); } } });
 document.addEventListener("change", event => { if (event.target.matches("[data-completed]")) { state.completed[event.target.dataset.completed] = Math.max(0, Math.min(Number(event.target.max), Number(event.target.value) || 0)); saveState(); renderToday(); } });
 document.addEventListener("change", event => { if (event.target.matches("[data-score-date]")) { const score = Number(event.target.value); if (event.target.value === "") delete state.fullLengthScores[event.target.dataset.scoreDate]; else state.fullLengthScores[event.target.dataset.scoreDate] = Math.max(0, Math.min(528, score || 0)); saveState(); renderProgress(); enhanceSubsectionScores(); enhanceMainScoreGraph(); showToast("Full-length score saved."); } });
