@@ -21,8 +21,7 @@ function loadState() {
   const exam = new Date(); exam.setDate(exam.getDate() + 100);
   return { examDate: iso(exam), fullLengthDay: "Saturday", breaks: [], unavailable: "", targets: {}, completed: {}, tasks: {}, fullLengths: {}, fullLengthScores: {}, fullLengthSectionScores: {}, reviews: [] };
 }
-let saveCountSinceReminder = 0;
-function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); if (++saveCountSinceReminder >= 40) { saveCountSinceReminder = 0; showToast("Tip: use Export Data occasionally to keep a backup of your plan."); } }
+function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
 function exportPlan() { const exportData = { exportedAt: new Date().toISOString(), setup: { examDate: state.examDate, fullLengthDay: state.fullLengthDay, breaks: state.breaks, unavailable: state.unavailable, targets: state.targets }, calendar: { fullLengths: state.fullLengths, tasks: state.tasks }, progress: { completed: state.completed, fullLengthScores: state.fullLengthScores, fullLengthSectionScores: state.fullLengthSectionScores, reviews: state.reviews } }; const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" }); const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = "mcat-calendar-progress.json"; link.click(); URL.revokeObjectURL(link.href); showToast("Calendar and progress exported."); }
 const EXPORT_COLORS = {
   "UWorld C/P": "#2563eb", "UWorld B/B": "#059669", "UWorld CARS": "#c2410c", "UWorld P/S": "#7c3aed",
