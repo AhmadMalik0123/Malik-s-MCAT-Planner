@@ -319,7 +319,6 @@ function buildTasks(exam) {
       const remaining = remainingBySection.get(picked);
       const amount = Math.max(1, Math.ceil(remaining / daysLeftForSection.get(picked)));
       addTask(tasks, days[i], picked, `${amount} questions`);
-      tasks[dateKey(days[i])].at(-1).label += " + review missed ones";
       remainingBySection.set(picked, remaining - amount);
       daysLeftForSection.set(picked, daysLeftForSection.get(picked) - 1);
     }
