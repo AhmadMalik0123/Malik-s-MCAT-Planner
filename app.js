@@ -289,8 +289,10 @@ function buildTasks(exam) {
   const aamcStart = Math.min(days.length, Math.max(0, uworldEnd - 7));
   const aamcEnd = days.length;
 
-  // each day is dedicated to one section only, rotating day-to-day so the biggest section (C/P) comes up most often
-  const scheduleSections = (sections, start, end) => {
+  // each day is dedicated to one section only, rotating day-to-day proportional to remaining work.
+  // sections named in lateSections only become eligible once exactly enough days remain to fit their day quota,
+  // so they still get an even, non-dumped spread but join the rotation later than the others
+  const scheduleSections = (sections, start, end, lateSections = []) => {
     const active = sections.filter(section => targetFor(section) > completedFor(section));
     if (!active.length) return;
     const scheduleEnd = Math.min(end, days.length);
@@ -304,17 +306,18 @@ function buildTasks(exam) {
     let assignedDays = [...dayCounts.values()].reduce((sum, value) => sum + value, 0);
     const remainders = active.map((section, index) => ({ section, remainder: rawShares[index] - Math.floor(rawShares[index]) })).sort((a, b) => b.remainder - a.remainder);
     for (let i = 0; assignedDays < window; i++, assignedDays++) dayCounts.set(remainders[i % remainders.length].section, dayCounts.get(remainders[i % remainders.length].section) + 1);
+    const entryDay = new Map(active.map(section => [section, lateSections.includes(section) ? Math.max(start, scheduleEnd - dayCounts.get(section)) : start]));
     // smooth weighted round-robin (nginx-style) picks a section for each day proportional to its remaining day count
     const currentWeight = new Map(active.map(section => [section, 0]));
     const daysLeftForSection = new Map(dayCounts);
     for (let i = start; i < scheduleEnd; i++) {
       let picked = null;
       active.forEach(section => {
-        if (daysLeftForSection.get(section) <= 0) return;
+        if (daysLeftForSection.get(section) <= 0 || i < entryDay.get(section)) return;
         currentWeight.set(section, currentWeight.get(section) + dayCounts.get(section));
         if (!picked || currentWeight.get(section) > currentWeight.get(picked)) picked = section;
       });
-      if (!picked) break;
+      if (!picked) continue;
       currentWeight.set(picked, currentWeight.get(picked) - window);
       const remaining = remainingBySection.get(picked);
       const amount = Math.max(1, Math.ceil(remaining / daysLeftForSection.get(picked)));
@@ -324,53 +327,27 @@ function buildTasks(exam) {
     }
   };
 
-  // P/S joins the same C/P + B/B rotation, but only becomes eligible partway through so it enters late in the cycle
+  // P/S shares the same rotation as C/P and B/B (evenly spread, no single-day dumps) but only becomes eligible
+  // once exactly enough days remain to fit its own quota, so it naturally joins the cycle later
   const psSection = "UWorld P/S";
-  const primaryUworldSections = uworldSections.filter(section => section !== psSection);
-  const psRemaining = Math.max(0, targetFor(psSection) - completedFor(psSection));
-  const psPace = 45;
-  const psActiveDays = psRemaining ? Math.max(1, Math.ceil(psRemaining / psPace)) : 0;
-  const psEntry = psRemaining ? Math.max(uworldStart, uworldEnd - psActiveDays) : uworldEnd;
-  const uworldParticipants = [
-    ...primaryUworldSections.filter(section => targetFor(section) > completedFor(section)).map(section => ({ section, entry: uworldStart })),
-    ...(psRemaining > 0 ? [{ section: psSection, entry: psEntry }] : [])
-  ];
-  if (uworldParticipants.length) {
-    const remainingBySection = new Map(uworldParticipants.map(participant => [participant.section, Math.max(0, targetFor(participant.section) - completedFor(participant.section))]));
-    const currentWeight = new Map(uworldParticipants.map(participant => [participant.section, 0]));
-    for (let i = uworldStart; i < uworldEnd; i++) {
-      const eligible = uworldParticipants.filter(participant => i >= participant.entry && remainingBySection.get(participant.section) > 0);
-      if (!eligible.length) continue;
-      let picked = null;
-      eligible.forEach(participant => {
-        currentWeight.set(participant.section, currentWeight.get(participant.section) + remainingBySection.get(participant.section));
-        if (!picked || currentWeight.get(participant.section) > currentWeight.get(picked)) picked = participant.section;
-      });
-      const totalEligibleRemaining = eligible.reduce((sum, participant) => sum + remainingBySection.get(participant.section), 0);
-      currentWeight.set(picked, currentWeight.get(picked) - totalEligibleRemaining);
-      const remaining = remainingBySection.get(picked);
-      const amount = Math.max(1, Math.ceil(remaining / (uworldEnd - i)));
-      addTask(tasks, days[i], picked, `${amount} questions`);
-      remainingBySection.set(picked, remaining - amount);
-    }
-  }
+  scheduleSections(uworldSections, uworldStart, uworldEnd, [psSection]);
   scheduleSections(aamcSections, aamcStart, aamcEnd);
   for (let i = days.length - 1; i >= Math.max(0, days.length - carsDays); i--) {
     const count = Math.min(carsRate, remainingCars);
     addTask(tasks, days[i], "AAMC CARS", `${count} passages`);
     remainingCars -= count;
   }
-  // once UWorld is done, re-review it (amount scaled to the target percentages) but stop ~3 weeks before the exam so the final stretch is AAMC/FL-only
+  // once UWorld is done, sprinkle in re-review reps (amount scaled to the target percentages) alongside AAMC,
+  // evenly spread until ~3 weeks before the exam so the final stretch is AAMC/FL-only
   const uworldHasContent = uworldSections.some(section => targetFor(section) > 0);
   if (uworldHasContent) {
     const uworldTotalTarget = uworldSections.reduce((sum, section) => sum + targetFor(section), 0);
     const reviewAmount = Math.max(10, Math.round(uworldTotalTarget / idealUworldDays));
     const reviewCutoff = addDays(exam, -21);
     const reviewEnd = days.filter(date => date < reviewCutoff).length;
+    const reviewEvery = 3; // one review session every 3rd day for an even spread
     days.forEach((date, index) => {
-      if (index < uworldEnd || index >= reviewEnd) return;
-      const key = dateKey(date);
-      if ((tasks[key] || []).some(task => uworldSections.includes(task.section) || aamcSections.includes(task.section))) return;
+      if (index < uworldEnd || index >= reviewEnd || (index - uworldEnd) % reviewEvery !== 0) return;
       addTask(tasks, date, "Re-Review UWorld Questions", `${reviewAmount} questions`);
     });
   }
