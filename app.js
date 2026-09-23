@@ -325,7 +325,15 @@ function buildTasks(exam) {
     }
   };
 
-  scheduleSections(uworldSections, uworldStart, uworldEnd);
+  // P/S is the smallest UWorld pool, so cluster it in its own block at the tail end of the UWorld window
+  // instead of mixing it into the C/P and B/B rotation where it would barely show up
+  const psSection = "UWorld P/S";
+  const primaryUworldSections = uworldSections.filter(section => section !== psSection);
+  const psRemaining = Math.max(0, targetFor(psSection) - completedFor(psSection));
+  const psDays = psRemaining ? Math.max(1, Math.min(uworldDays, Math.ceil(psRemaining / 75))) : 0;
+  const psStart = uworldEnd - psDays;
+  scheduleSections(primaryUworldSections, uworldStart, psStart);
+  scheduleSections([psSection], psStart, uworldEnd);
   scheduleSections(aamcSections, aamcStart, aamcEnd);
   for (let i = days.length - 1; i >= Math.max(0, days.length - carsDays); i--) {
     const count = Math.min(carsRate, remainingCars);
