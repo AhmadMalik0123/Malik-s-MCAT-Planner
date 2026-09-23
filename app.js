@@ -289,16 +289,41 @@ function buildTasks(exam) {
   const aamcStart = Math.min(days.length, Math.max(0, uworldEnd - 7));
   const aamcEnd = days.length;
 
-  const scheduleSections = (sections, start, end) => sections.filter(section => targetFor(section) > completedFor(section)).forEach(section => {
-    let remaining = Math.max(0, targetFor(section) - completedFor(section));
+  // each day is dedicated to one section only, rotating day-to-day so the biggest section (C/P) comes up most often
+  const scheduleSections = (sections, start, end) => {
+    const active = sections.filter(section => targetFor(section) > completedFor(section));
+    if (!active.length) return;
     const scheduleEnd = Math.min(end, days.length);
-    for (let i = start; i < scheduleEnd && remaining > 0; i++) {
-      const daysLeft = scheduleEnd - i;
-      const amount = Math.max(1, Math.ceil(remaining / daysLeft));
-      addTask(tasks, days[i], section, `${amount} questions`);
-      remaining -= amount;
+    const window = Math.max(0, scheduleEnd - start);
+    if (!window) return;
+    const remainingBySection = new Map(active.map(section => [section, Math.max(0, targetFor(section) - completedFor(section))]));
+    const totalRemaining = [...remainingBySection.values()].reduce((sum, value) => sum + value, 0);
+    // largest remainder method: give every section at least one day, then split the rest by its share of the remaining work
+    const rawShares = active.map(section => remainingBySection.get(section) / totalRemaining * window);
+    const dayCounts = new Map(active.map((section, index) => [section, Math.max(1, Math.floor(rawShares[index]))]));
+    let assignedDays = [...dayCounts.values()].reduce((sum, value) => sum + value, 0);
+    const remainders = active.map((section, index) => ({ section, remainder: rawShares[index] - Math.floor(rawShares[index]) })).sort((a, b) => b.remainder - a.remainder);
+    for (let i = 0; assignedDays < window; i++, assignedDays++) dayCounts.set(remainders[i % remainders.length].section, dayCounts.get(remainders[i % remainders.length].section) + 1);
+    // smooth weighted round-robin (nginx-style) picks a section for each day proportional to its remaining day count
+    const currentWeight = new Map(active.map(section => [section, 0]));
+    const daysLeftForSection = new Map(dayCounts);
+    for (let i = start; i < scheduleEnd; i++) {
+      let picked = null;
+      active.forEach(section => {
+        if (daysLeftForSection.get(section) <= 0) return;
+        currentWeight.set(section, currentWeight.get(section) + dayCounts.get(section));
+        if (!picked || currentWeight.get(section) > currentWeight.get(picked)) picked = section;
+      });
+      if (!picked) break;
+      currentWeight.set(picked, currentWeight.get(picked) - window);
+      const remaining = remainingBySection.get(picked);
+      const amount = Math.max(1, Math.ceil(remaining / daysLeftForSection.get(picked)));
+      addTask(tasks, days[i], picked, `${amount} questions`);
+      tasks[dateKey(days[i])].at(-1).label += " + review missed ones";
+      remainingBySection.set(picked, remaining - amount);
+      daysLeftForSection.set(picked, daysLeftForSection.get(picked) - 1);
     }
-  });
+  };
 
   scheduleSections(uworldSections, uworldStart, uworldEnd);
   scheduleSections(aamcSections, aamcStart, aamcEnd);
