@@ -329,7 +329,7 @@ function buildTasks(exam) {
   const psSection = "UWorld P/S";
   const primaryUworldSections = uworldSections.filter(section => section !== psSection);
   const psRemaining = Math.max(0, targetFor(psSection) - completedFor(psSection));
-  const psDays = psRemaining ? Math.max(1, Math.min(uworldDays, Math.ceil(psRemaining / 75))) : 0;
+  const psDays = psRemaining ? Math.max(1, Math.min(uworldDays, Math.ceil(psRemaining / 45))) : 0;
   const psStart = uworldEnd - psDays;
   scheduleSections(primaryUworldSections, uworldStart, psStart);
   scheduleSections([psSection], psStart, uworldEnd);
