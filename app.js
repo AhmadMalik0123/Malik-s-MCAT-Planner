@@ -289,9 +289,7 @@ function buildTasks(exam) {
   const aamcStart = Math.min(days.length, Math.max(0, uworldEnd - 7));
   const aamcEnd = days.length;
 
-  // each day is dedicated to one section only, rotating day-to-day proportional to remaining work.
-  // sections named in lateSections only become eligible once exactly enough days remain to fit their day quota,
-  // so they still get an even, non-dumped spread but join the rotation later than the others
+  // AAMC keeps the weighted round-robin (biggest remaining pool shows up most often)
   const scheduleSections = (sections, start, end, lateSections = []) => {
     const active = sections.filter(section => targetFor(section) > completedFor(section));
     if (!active.length) return;
@@ -327,10 +325,38 @@ function buildTasks(exam) {
     }
   };
 
-  // P/S shares the same rotation as C/P and B/B (evenly spread, no single-day dumps) but only becomes eligible
-  // once exactly enough days remain to fit its own quota, so it naturally joins the cycle later
+  // UWorld cycles through a fixed B/B -> P/S -> C/P pattern every day (skipping any section not yet eligible
+  // or already finished), so P/S is part of the daily rotation instead of a separate track
   const psSection = "UWorld P/S";
-  scheduleSections(uworldSections, uworldStart, uworldEnd, [psSection]);
+  const uworldOrder = ["UWorld B/B", "UWorld P/S", "UWorld C/P"].filter(section => uworldSections.includes(section) && targetFor(section) > completedFor(section));
+  if (uworldOrder.length) {
+    const psRemaining = Math.max(0, targetFor(psSection) - completedFor(psSection));
+    // P/S joins once there's enough runway left to cover it at a reasonable pace (~45/sitting) at its 1-in-3 turn frequency
+    const psOccurrencesNeeded = psRemaining ? Math.max(1, Math.ceil(psRemaining / 45)) : 0;
+    const psEntry = psRemaining ? Math.max(uworldStart, uworldEnd - psOccurrencesNeeded * uworldOrder.length) : uworldEnd;
+    const entryDay = new Map(uworldOrder.map(section => [section, section === psSection ? psEntry : uworldStart]));
+    // first pass: walk the fixed cycle to see how many times each section actually lands on a day (entry gating can skip turns)
+    const sequence = [];
+    let pointer = 0;
+    for (let i = uworldStart; i < uworldEnd; i++) {
+      let picked = null;
+      for (let step = 0; step < uworldOrder.length; step++) {
+        const candidate = uworldOrder[(pointer + step) % uworldOrder.length];
+        if (i >= entryDay.get(candidate)) { picked = candidate; pointer = (pointer + step + 1) % uworldOrder.length; break; }
+      }
+      sequence.push(picked);
+    }
+    const occurrencesLeft = new Map(uworldOrder.map(section => [section, sequence.filter(picked => picked === section).length]));
+    const remainingBySection = new Map(uworldOrder.map(section => [section, Math.max(0, targetFor(section) - completedFor(section))]));
+    sequence.forEach((section, offset) => {
+      if (!section) return;
+      const remaining = remainingBySection.get(section);
+      const amount = Math.max(1, Math.ceil(remaining / occurrencesLeft.get(section)));
+      addTask(tasks, days[uworldStart + offset], section, `${amount} questions`);
+      remainingBySection.set(section, remaining - amount);
+      occurrencesLeft.set(section, occurrencesLeft.get(section) - 1);
+    });
+  }
   scheduleSections(aamcSections, aamcStart, aamcEnd);
   for (let i = days.length - 1; i >= Math.max(0, days.length - carsDays); i--) {
     const count = Math.min(carsRate, remainingCars);
@@ -338,16 +364,15 @@ function buildTasks(exam) {
     remainingCars -= count;
   }
   // once UWorld is done, sprinkle in re-review reps (amount scaled to the target percentages) alongside AAMC,
-  // evenly spread until ~3 weeks before the exam so the final stretch is AAMC/FL-only
+  // every day (breaks/unavailable/FL days are already excluded from `days`) until ~3 weeks before the exam
   const uworldHasContent = uworldSections.some(section => targetFor(section) > 0);
   if (uworldHasContent) {
     const uworldTotalTarget = uworldSections.reduce((sum, section) => sum + targetFor(section), 0);
     const reviewAmount = Math.max(10, Math.round(uworldTotalTarget / idealUworldDays));
     const reviewCutoff = addDays(exam, -21);
     const reviewEnd = days.filter(date => date < reviewCutoff).length;
-    const reviewEvery = 3; // one review session every 3rd day for an even spread
     days.forEach((date, index) => {
-      if (index < uworldEnd || index >= reviewEnd || (index - uworldEnd) % reviewEvery !== 0) return;
+      if (index < uworldEnd || index >= reviewEnd) return;
       addTask(tasks, date, "Re-Review UWorld Questions", `${reviewAmount} questions`);
     });
   }
