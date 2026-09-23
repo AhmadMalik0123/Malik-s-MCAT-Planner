@@ -364,12 +364,12 @@ function buildTasks(exam) {
     remainingCars -= count;
   }
   // once UWorld is done, sprinkle in re-review reps (amount scaled to the target percentages) alongside AAMC,
-  // every day (breaks/unavailable/FL days are already excluded from `days`) until ~3 weeks before the exam
+  // every day (breaks/unavailable/FL days are already excluded from `days`) until the week of the exam
   const uworldHasContent = uworldSections.some(section => targetFor(section) > 0);
   if (uworldHasContent) {
     const uworldTotalTarget = uworldSections.reduce((sum, section) => sum + targetFor(section), 0);
     const reviewAmount = Math.max(10, Math.round(uworldTotalTarget / idealUworldDays));
-    const reviewCutoff = addDays(exam, -21);
+    const reviewCutoff = addDays(exam, -7);
     const reviewEnd = days.filter(date => date < reviewCutoff).length;
     days.forEach((date, index) => {
       if (index < uworldEnd || index >= reviewEnd) return;
@@ -384,7 +384,7 @@ function buildTasks(exam) {
   const ankiEnd = days.filter(date => date < ankiCutoff).length;
   days.forEach((date, index) => {
     if (index >= ankiEnd) return;
-    addTask(tasks, date, "Anki Review", "Daily flashcards");
+    addTask(tasks, date, "Anki Flashcards", "Daily review");
   });
   return tasks;
 }
