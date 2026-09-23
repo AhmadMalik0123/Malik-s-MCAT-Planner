@@ -39,8 +39,8 @@ function exportCombinedReport() {
   const legendChips = [...Object.entries(EXPORT_COLORS), ["Full-length exam", "#4f46e5"], ["Break / unavailable", "#64748b"]]
     .map(([label, color]) => `<span class="legend-chip"><span class="legend-dot" style="background:${color}"></span>${esc(label)}</span>`).join("");
   const monthsHtml = months.map(month => calendarMonthBlock(month, exam)).join("");
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Malik's and Caroliona's MCAT Planner Export</title><style>${EXPORT_CSS}</style></head><body>
-    <header class="print-head"><h1>Malik's and Caroliona's MCAT Planner</h1><p>Exported ${formatDate(new Date())} &mdash; calendar and progress through ${formatDate(exam)}</p><button class="print-btn no-print" onclick="window.print()">Print / Save as PDF</button></header>
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Malik's and Carolina's MCAT Planner Export</title><style>${EXPORT_CSS}</style></head><body>
+    <header class="print-head"><h1>Malik's and Carolina's MCAT Planner</h1><p>Exported ${formatDate(new Date())} &mdash; calendar and progress through ${formatDate(exam)}</p><button class="print-btn no-print" onclick="window.print()">Print / Save as PDF</button></header>
     <h2 class="export-h2">Study calendar</h2>
     <div class="legend">${legendChips}</div>
     ${monthsHtml}
@@ -265,6 +265,7 @@ function readSetup() {
 }
 function generatePlan() { readSetup(); const exam = parseDate(state.examDate); if (!exam || exam <= new Date()) return showToast("Choose a future exam date."); state.fullLengths = {}; const dayNumber = DAY_NAMES.indexOf(state.fullLengthDay); for (let i = 0; i < 7; i++) { let date = addDays(exam, -(49 - i * 7)); while (date.getDay() !== dayNumber) date = addDays(date, -1); if (date > new Date()) state.fullLengths[dateKey(date)] = ["Unscored", "FL 1", "FL 2", "FL 3", "FL 4", "FL 5", "FL 6"][i]; } state.fullLengths[state.examDate] = "MCAT EXAM"; state.tasks = buildTasks(exam); saveState(); displayedMonth = firstOfMonth(new Date()); currentView = "today"; render(); showToast("Calendar generated."); }
 function availableDays(exam) { const days = []; const start = new Date(); start.setHours(12, 0, 0, 0); const unavailable = state.unavailable.split(",").map(value => value.trim()).filter(Boolean); for (let date = start; date < exam; date = addDays(date, 1)) { const key = dateKey(date); const preExam = key === dateKey(addDays(exam, -1)); if (!unavailable.includes(key) && !state.breaks.includes(DAY_NAMES[date.getDay()]) && !preExam && !state.fullLengths[key]) days.push(date); } return days; }
+function firstFullLengthDate() { const dates = Object.entries(state.fullLengths).filter(([, label]) => label !== "MCAT EXAM").map(([key]) => key).sort(); return dates.length ? parseDate(dates[0]) : null; }
 function buildTasks(exam) {
   const tasks = {};
   const days = availableDays(exam);
@@ -276,10 +277,17 @@ function buildTasks(exam) {
   const uworldSections = Object.keys(TOTALS.uworld).filter(section => section !== "UWorld CARS");
   const aamcSections = Object.keys(TOTALS.aamc).filter(section => section !== "AAMC CARS");
   const uworldRemaining = uworldSections.reduce((sum, section) => sum + Math.max(0, targetFor(section) - completedFor(section)), 0);
-  const uworldDays = uworldRemaining ? Math.min(days.length, Math.max(1, Math.ceil(uworldRemaining / 75))) : 0;
-  const aamcWindow = Math.max(1, Math.floor(days.length * .35));
-  const aamcStart = uworldRemaining ? Math.min(days.length, Math.max(0, uworldDays - 7)) : 0;
-  const aamcEnd = Math.min(days.length, aamcStart + aamcWindow);
+  // full-length exams mark the point where AAMC review should take over from UWorld
+  const flStart = firstFullLengthDate();
+  const preFLDays = flStart ? days.filter(date => date < flStart).length : days.length;
+  const idealUworldDays = 45; // roughly a month and a half of dedicated UWorld time
+  const uworldMinDays = uworldRemaining ? Math.max(1, Math.ceil(uworldRemaining / 75)) : 0;
+  const uworldDays = uworldRemaining ? Math.min(days.length, Math.max(uworldMinDays, Math.min(idealUworldDays, Math.max(preFLDays, uworldMinDays)))) : 0;
+  // delay UWorld's start so it wraps up right as full lengths begin instead of finishing early and leaving a gap
+  const uworldStart = Math.max(0, Math.min(preFLDays, days.length) - uworldDays);
+  const uworldEnd = uworldStart + uworldDays;
+  const aamcStart = Math.min(days.length, Math.max(0, uworldEnd - 7));
+  const aamcEnd = days.length;
 
   const scheduleSections = (sections, start, end) => sections.filter(section => targetFor(section) > completedFor(section)).forEach(section => {
     let remaining = Math.max(0, targetFor(section) - completedFor(section));
@@ -292,7 +300,7 @@ function buildTasks(exam) {
     }
   });
 
-  scheduleSections(uworldSections, 0, uworldDays);
+  scheduleSections(uworldSections, uworldStart, uworldEnd);
   scheduleSections(aamcSections, aamcStart, aamcEnd);
   for (let i = days.length - 1; i >= Math.max(0, days.length - carsDays); i--) {
     const count = Math.min(carsRate, remainingCars);
