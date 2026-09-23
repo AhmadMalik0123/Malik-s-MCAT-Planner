@@ -329,7 +329,7 @@ function buildTasks(exam) {
   const psSection = "UWorld P/S";
   const primaryUworldSections = uworldSections.filter(section => section !== psSection);
   const psRemaining = Math.max(0, targetFor(psSection) - completedFor(psSection));
-  const psDays = psRemaining ? Math.min(uworldDays, Math.max(7, Math.ceil(psRemaining / 40))) : 0;
+  const psDays = psRemaining ? Math.max(1, Math.min(uworldDays, Math.ceil(psRemaining / 75))) : 0;
   const psStart = uworldEnd - psDays;
   scheduleSections(primaryUworldSections, uworldStart, psStart);
   scheduleSections([psSection], psStart, uworldEnd);
@@ -339,14 +339,16 @@ function buildTasks(exam) {
     addTask(tasks, days[i], "AAMC CARS", `${count} passages`);
     remainingCars -= count;
   }
-  // once UWorld is done, light review reps keep the material fresh on days AAMC doesn't fill
+  // once UWorld is done, re-review it at the same daily pace (weighted by each section's target share) on days AAMC doesn't fill
   const uworldHasContent = uworldSections.some(section => targetFor(section) > 0);
   if (uworldHasContent) {
+    const uworldTotalTarget = uworldSections.reduce((sum, section) => sum + targetFor(section), 0);
+    const reviewAmount = Math.max(10, Math.round(uworldTotalTarget / idealUworldDays));
     days.forEach((date, index) => {
       if (index < uworldEnd) return;
       const key = dateKey(date);
       if ((tasks[key] || []).some(task => uworldSections.includes(task.section) || aamcSections.includes(task.section))) return;
-      addTask(tasks, date, "UWorld Review", "15 questions across all sections");
+      addTask(tasks, date, "Re-Review UWorld Questions", `${reviewAmount} questions`);
     });
   }
   days.forEach((date, index) => {
