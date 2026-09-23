@@ -324,28 +324,51 @@ function buildTasks(exam) {
     }
   };
 
-  // P/S is the smallest UWorld pool, so cluster it in its own block at the tail end of the UWorld window
-  // instead of mixing it into the C/P and B/B rotation where it would barely show up
+  // P/S joins the same C/P + B/B rotation, but only becomes eligible partway through so it enters late in the cycle
   const psSection = "UWorld P/S";
   const primaryUworldSections = uworldSections.filter(section => section !== psSection);
   const psRemaining = Math.max(0, targetFor(psSection) - completedFor(psSection));
-  const psDays = psRemaining ? Math.max(1, Math.min(uworldDays, Math.ceil(psRemaining / 45))) : 0;
-  const psStart = uworldEnd - psDays;
-  scheduleSections(primaryUworldSections, uworldStart, psStart);
-  scheduleSections([psSection], psStart, uworldEnd);
+  const psPace = 45;
+  const psActiveDays = psRemaining ? Math.max(1, Math.ceil(psRemaining / psPace)) : 0;
+  const psEntry = psRemaining ? Math.max(uworldStart, uworldEnd - psActiveDays) : uworldEnd;
+  const uworldParticipants = [
+    ...primaryUworldSections.filter(section => targetFor(section) > completedFor(section)).map(section => ({ section, entry: uworldStart })),
+    ...(psRemaining > 0 ? [{ section: psSection, entry: psEntry }] : [])
+  ];
+  if (uworldParticipants.length) {
+    const remainingBySection = new Map(uworldParticipants.map(participant => [participant.section, Math.max(0, targetFor(participant.section) - completedFor(participant.section))]));
+    const currentWeight = new Map(uworldParticipants.map(participant => [participant.section, 0]));
+    for (let i = uworldStart; i < uworldEnd; i++) {
+      const eligible = uworldParticipants.filter(participant => i >= participant.entry && remainingBySection.get(participant.section) > 0);
+      if (!eligible.length) continue;
+      let picked = null;
+      eligible.forEach(participant => {
+        currentWeight.set(participant.section, currentWeight.get(participant.section) + remainingBySection.get(participant.section));
+        if (!picked || currentWeight.get(participant.section) > currentWeight.get(picked)) picked = participant.section;
+      });
+      const totalEligibleRemaining = eligible.reduce((sum, participant) => sum + remainingBySection.get(participant.section), 0);
+      currentWeight.set(picked, currentWeight.get(picked) - totalEligibleRemaining);
+      const remaining = remainingBySection.get(picked);
+      const amount = Math.max(1, Math.ceil(remaining / (uworldEnd - i)));
+      addTask(tasks, days[i], picked, `${amount} questions`);
+      remainingBySection.set(picked, remaining - amount);
+    }
+  }
   scheduleSections(aamcSections, aamcStart, aamcEnd);
   for (let i = days.length - 1; i >= Math.max(0, days.length - carsDays); i--) {
     const count = Math.min(carsRate, remainingCars);
     addTask(tasks, days[i], "AAMC CARS", `${count} passages`);
     remainingCars -= count;
   }
-  // once UWorld is done, re-review it at the same daily pace (weighted by each section's target share) on days AAMC doesn't fill
+  // once UWorld is done, re-review it (amount scaled to the target percentages) but stop ~3 weeks before the exam so the final stretch is AAMC/FL-only
   const uworldHasContent = uworldSections.some(section => targetFor(section) > 0);
   if (uworldHasContent) {
     const uworldTotalTarget = uworldSections.reduce((sum, section) => sum + targetFor(section), 0);
     const reviewAmount = Math.max(10, Math.round(uworldTotalTarget / idealUworldDays));
+    const reviewCutoff = addDays(exam, -21);
+    const reviewEnd = days.filter(date => date < reviewCutoff).length;
     days.forEach((date, index) => {
-      if (index < uworldEnd) return;
+      if (index < uworldEnd || index >= reviewEnd) return;
       const key = dateKey(date);
       if ((tasks[key] || []).some(task => uworldSections.includes(task.section) || aamcSections.includes(task.section))) return;
       addTask(tasks, date, "Re-Review UWorld Questions", `${reviewAmount} questions`);
