@@ -376,7 +376,7 @@ textarea { resize: vertical; }
 .switch input:checked + span { background: var(--grad); }
 .switch input:checked + span::after { transform: translateX(18px); }
 .switch input:focus-visible + span { outline: 2px solid var(--cyan); outline-offset: 2px; }
-.kaplan-btn { width: 100%; margin-bottom: 14px; padding: 14px; border-style: dashed; border-color: rgb(var(--a1) / .5); background: rgb(var(--a1) / .07); }
+.kaplan-btn { flex-direction: column; gap: 2px; width: 100%; margin-bottom: 14px; padding: 14px; border-style: dashed; border-color: rgb(var(--a1) / .5); background: rgb(var(--a1) / .07); }
 .kaplan-btn:hover { background: rgb(var(--a1) / .14); }
 .content-sections { display: grid; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
 .content-section { display: grid; grid-template-columns: 150px 1fr; align-items: start; border-top: 1px solid var(--line); }

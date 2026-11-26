@@ -346,7 +346,8 @@ function generatePlan() { readSetup(); const exam = parseDate(state.examDate); i
 function availableDays(exam) { const days = []; const start = new Date(); start.setHours(12, 0, 0, 0); const unavailable = state.unavailable.split(",").map(value => value.trim()).filter(Boolean); for (let date = start; date < exam; date = addDays(date, 1)) { const key = dateKey(date); const preExam = key === dateKey(addDays(exam, -1)); if (!unavailable.includes(key) && !state.breaks.includes(DAY_NAMES[date.getDay()]) && !preExam && !state.fullLengths[key]) days.push(date); } return days; }
 function firstFullLengthDate() { const dates = Object.entries(state.fullLengths).filter(([, label]) => label !== "MCAT EXAM").map(([key]) => key).sort(); return dates.length ? parseDate(dates[0]) : null; }
 // Effort per content unit, in "study days" (a textbook chapter ≈ a day of content work).
-const UNIT_EFFORT = { Chapter: 0.8, Lesson: 0.5, Video: 0.2 };
+const UNIT_EFFORT = { Chapter: 0.8, Lesson: 0.4, Video: 0.1, Page: 0.035 };
+const unitEffort = resource => resource.effort ?? UNIT_EFFORT[resource.unitLabel] ?? 0.8;
 const UWORLD_PER_DAY = 50, AAMC_PER_DAY = 35, IDEAL_UWORLD_DAYS = 45;
 // Weight for each day in [start, end): ramps up over rampIn days and down over rampOut days, so phases hand off gradually.
 function phaseWeights(start, end, rampIn, rampOut) {
@@ -411,7 +412,7 @@ function buildTasks(exam) {
   const aamc = new Map(Object.keys(TOTALS.aamc).filter(section => section !== "AAMC CARS").map(section => [section, remaining(section)]));
   const sum = map => [...map.values()].reduce((total, n) => total + n, 0);
   const effort = {
-    content: contentSlots.reduce((total, slot) => total + (UNIT_EFFORT[slot.resource.unitLabel] ?? 1), 0),
+    content: contentSlots.reduce((total, slot) => total + unitEffort(slot.resource), 0),
     uworld: sum(uworld) / UWORLD_PER_DAY,
     aamc: sum(aamc) / AAMC_PER_DAY
   };
@@ -424,7 +425,7 @@ function buildTasks(exam) {
     // Content must be finished before the first full length (but never more than 3 units a day);
     // UWorld then AAMC share whatever time is left, in proportion to their workload.
     const firstFL = flStart ? days.filter(date => date < flStart).length : N;
-    const minContentDays = Math.ceil(contentSlots.length / 3);
+    const minContentDays = Math.ceil(effort.content / 2.4); // at most ~3 chapters' worth a day
     let contentEnd = order.includes("content") ? N * effort.content / totalEffort : 0;
     if (order.includes("content") && order.length > 1) contentEnd = Math.min(contentEnd, Math.max(firstFL, minContentDays));
     contentEnd = Math.min(N, contentEnd);
@@ -451,13 +452,24 @@ function buildTasks(exam) {
   if (ranges.content && contentSlots.length) {
     const entries = [...ranges.content.weights];
     const totalW = entries.reduce((total, [, w]) => total + w, 0);
+    const marks = []; let run = 0;
+    contentSlots.forEach(slot => { const e = unitEffort(slot.resource); marks.push((run + e / 2) / effort.content); run += e; });
     let cumulative = 0, k = 0;
-    entries.forEach(([day, w]) => {
+    entries.forEach(([day, w], index) => {
       cumulative += w;
-      while (k < contentSlots.length && (k + 0.5) / contentSlots.length <= cumulative / totalW) {
+      const byResource = new Map();
+      while (k < contentSlots.length && (marks[k] <= cumulative / totalW || index === entries.length - 1)) {
         const { resource, unit } = contentSlots[k++];
-        (perDay[day] ||= []).push([`Content ${sectionShort(resource.section)}`, `${resourceTitle(resource)} · ${unitName(resource, unit)}`, { contentId: resource.id, unit }]);
+        if (!byResource.has(resource)) byResource.set(resource, []);
+        byResource.get(resource).push(unit);
       }
+      byResource.forEach((units, resource) => {
+        units.sort((a, b) => a - b);
+        let group = [units[0]];
+        const flush = () => (perDay[day] ||= []).push([`Content ${sectionShort(resource.section)}`, `${resourceTitle(resource)} · ${unitRange(resource, group)}`, { contentId: resource.id, units: group }]);
+        units.slice(1).forEach(unit => { if (unit === group.at(-1) + 1) group.push(unit); else { flush(); group = [unit]; } });
+        flush();
+      });
     });
   }
   if (ranges.uworld) scheduleQuestionPhase(perDay, uworld, ranges.uworld.weights);
@@ -506,9 +518,9 @@ function timelineMarkup() {
   const pos = key => Math.max(0, Math.min(100, (parseDate(key).getTime() - startTime) / span * 100));
   const short = key => parseDate(key).toLocaleDateString(undefined, { month: "short", day: "numeric" });
   const rows = phases.map(p => `<div class="tl-row"><span class="tl-name">${p.name}</span><div class="tl-track"><div class="tl-bar" style="left:${pos(p.start)}%;width:${Math.max(1.5, pos(p.end) - pos(p.start))}%;--c:${p.color}"></div></div><span class="tl-dates">${short(p.start)} – ${short(p.end)}</span></div>`).join("");
-  const perDay = Object.values(state.tasks).map(list => ({ q: list.filter(t => /^(UWorld|AAMC) /.test(t.section) && /questions$/.test(t.detail)).reduce((n, t) => n + Number(t.detail.match(/\d+/)[0]), 0), c: list.filter(t => t.contentId !== undefined).length }));
+  const perDay = Object.values(state.tasks).map(list => ({ q: list.filter(t => /^(UWorld|AAMC) /.test(t.section) && /questions$/.test(t.detail)).reduce((n, t) => n + Number(t.detail.match(/\d+/)[0]), 0), c: list.filter(t => t.contentId !== undefined).reduce((n, t) => { const r = state.content.resources.find(x => x.id === t.contentId); return n + (r ? unitEffort(r) * (t.units?.length || 1) : 0); }, 0) }));
   const peakQ = Math.max(0, ...perDay.map(d => d.q)), peakC = Math.max(0, ...perDay.map(d => d.c));
-  const heavy = peakQ > 110 || peakC > 3 ? `<div class="tl-warn">⚠️ Heavy plan: up to ${peakQ} questions${peakC > 1 ? ` and ${peakC} content units` : ""} on your busiest days. Lowering targets or adding time will lighten it.</div>` : `<div class="tl-ok">✓ Busiest day: about ${peakQ} questions${peakC ? ` + ${peakC} content ${peakC === 1 ? "unit" : "units"}` : ""}.</div>`;
+  const heavy = peakQ > 110 || peakC > 2.5 ? `<div class="tl-warn">⚠️ Heavy plan: up to ${peakQ} questions${peakC > 2.5 ? ` and about ${Math.round(peakC / 0.8 * 10) / 10} chapters' worth of content` : ""} on your busiest days. Lowering targets or adding time will lighten it.</div>` : `<div class="tl-ok">✓ Busiest day: about ${peakQ} questions${peakC ? ` + about ${Math.max(1, Math.round(peakC / 0.8 * 10) / 10)} chapters' worth of content` : ""}.</div>`;
   return `<section class="card timeline anim"><div class="card-head"><h2>Your study timeline</h2><span class="muted">${short(startKey)} → 🎯 ${short(state.examDate)}</span></div>${rows}${heavy}<p class="muted tl-note">Everything is spread across the time you have: content first, easing into UWorld, then AAMC, then full lengths.</p></section>`;
 }
 function addTask(tasks, date, section, detail, extra = {}) { const key = dateKey(date); if (!tasks[key]) tasks[key] = []; tasks[key].push({ date: key, section, label: `${section}: ${detail}`, detail, done: false, index: tasks[key].length, ...extra }); }
@@ -575,7 +587,7 @@ function recordCompletedTasks() { Object.values(state.tasks).flat().forEach(task
 function updateCalendar() { if (!state.examDate || !Object.keys(state.tasks).length) return showToast("Generate a calendar first."); recordCompletedTasks(); saveState(); generatePlan(); showToast("Calendar updated from completed work."); }
 
 document.addEventListener("click", event => { const view = event.target.closest("[data-view]"); if (view) { currentView = view.dataset.view; render(); window.scrollTo({ top: 0, behavior: "smooth" }); return; } const link = event.target.closest("[data-link]"); if (link) window.open(link.dataset.link, "_blank", "noopener"); const action = event.target.closest("[data-action]"); if (action?.dataset.action === "generate") generatePlan(); if (action?.dataset.action === "update") updateCalendar(); if (action?.dataset.action === "export") exportPlan(); if (action?.dataset.action === "export-calendar") exportCombinedReport(); const filter = event.target.closest("[data-review-filter]"); if (filter) { reviewFilter = filter.dataset.reviewFilter; renderReview(); } const month = event.target.closest("[data-month]"); if (month) { const before = displayedMonth; displayedMonth = month.dataset.month === "today" ? firstOfMonth(new Date()) : new Date(displayedMonth.getFullYear(), displayedMonth.getMonth() + Number(month.dataset.month), 1, 12); renderCalendar(); if (displayedMonth.getTime() !== before.getTime()) document.querySelector(".month-grid")?.classList.add(displayedMonth > before ? "slide-next" : "slide-prev"); } const addCustom = event.target.closest("[data-add-custom-task]"); if (addCustom) addCustomTask(); const deleteTask = event.target.closest("[data-delete-task-date]"); if (deleteTask) deleteCustomTask(deleteTask.dataset.deleteTaskDate, deleteTask.dataset.deleteTaskId); });
-document.addEventListener("change", event => { if (event.target.matches("[data-task-date]")) { const task = state.tasks[event.target.dataset.taskDate]?.[Number(event.target.dataset.taskIndex)]; if (task) { task.done = event.target.checked; justToggled = `t:${task.date}:${task.index}`; if (task.contentId !== undefined) setContentDone(task.contentId, task.unit, task.done); saveState(); if (currentView === "today") renderToday(); showToast(event.target.checked ? "Task marked complete ✓" : "Task reopened."); } } });
+document.addEventListener("change", event => { if (event.target.matches("[data-task-date]")) { const task = state.tasks[event.target.dataset.taskDate]?.[Number(event.target.dataset.taskIndex)]; if (task) { task.done = event.target.checked; justToggled = `t:${task.date}:${task.index}`; if (task.contentId !== undefined) (task.units || [task.unit]).forEach(unit => setContentDone(task.contentId, unit, task.done)); saveState(); if (currentView === "today") renderToday(); showToast(event.target.checked ? "Task marked complete ✓" : "Task reopened."); } } });
 document.addEventListener("change", event => { if (event.target.matches("[data-custom-task-date]")) { const task = state.customTasks[event.target.dataset.customTaskDate]?.find(item => String(item.id) === event.target.dataset.customTaskId); if (task) { task.done = event.target.checked; justToggled = `c:${task.id}`; saveState(); if (currentView === "today") renderToday(); showToast(event.target.checked ? "Task marked complete ✓" : "Task reopened."); } } });
 document.addEventListener("change", event => { if (event.target.matches("[data-completed]")) { state.completed[event.target.dataset.completed] = Math.max(0, Math.min(Number(event.target.max), Number(event.target.value) || 0)); saveState(); } });
 document.addEventListener("change", event => { if (event.target.matches("[data-score-date]")) { const score = Number(event.target.value); if (event.target.value === "") delete state.fullLengthScores[event.target.dataset.scoreDate]; else state.fullLengthScores[event.target.dataset.scoreDate] = Math.max(0, Math.min(528, score || 0)); saveState(); renderProgress(); enhanceSubsectionScores(); enhanceMainScoreGraph(); showToast("Full-length score saved."); } });
@@ -598,14 +610,22 @@ const CONTENT_SECTIONS = [
   { key: "ps", label: "Psych/Soc", short: "P/S", color: "var(--content-ps)" }
 ];
 // Kaplan counts are editable defaults: editions differ.
+// [name, unit, default count, effort per unit]. Khan video counts are the MCAT playlists' totals (editable);
+// a Khan video is ~6 min, so it counts as a small fraction of a textbook chapter.
 const CONTENT_OPTIONS = {
-  bb: [["Kaplan Biology Review", "Chapter", 12], ["Kaplan Biochemistry Review", "Chapter", 12], ["Khan Academy", "Video"], ["Blueprint", "Chapter"], ["Princeton Review", "Chapter"]],
-  cp: [["Kaplan General Chemistry Review", "Chapter", 12], ["Kaplan Organic Chemistry Review", "Chapter", 12], ["Kaplan Physics & Math Review", "Chapter", 12], ["Khan Academy", "Video"], ["Blueprint", "Chapter"], ["Princeton Review", "Chapter"]],
-  ps: [["Kaplan Behavioral Sciences Review", "Chapter", 12], ["Khan Academy", "Video"], ["Blueprint", "Chapter"], ["Princeton Review", "Chapter"]]
+  bb: [["Kaplan Biology Review", "Chapter", 12], ["Kaplan Biochemistry Review", "Chapter", 12], ["Khan Academy Bio/Biochem videos", "Video", 368, 0.065], ["Blueprint", "Chapter"], ["Princeton Review", "Chapter"]],
+  cp: [["Kaplan General Chemistry Review", "Chapter", 12], ["Kaplan Organic Chemistry Review", "Chapter", 12], ["Kaplan Physics & Math Review", "Chapter", 12], ["Khan Academy Chem/Phys videos", "Video", 456, 0.065], ["Blueprint", "Chapter"], ["Princeton Review", "Chapter"]],
+  ps: [["Khan Academy Psych/Soc videos (recommended)", "Video", 291, 0.065], ["Khan Academy 300-page Psych/Soc document", "Page", 300, 0.035], ["Kaplan Behavioral Sciences Review", "Chapter", 12], ["Blueprint", "Chapter"], ["Princeton Review", "Chapter"]]
 };
-const KAPLAN_SET = { bb: [0, 1], cp: [0, 1, 2], ps: [0] };
+const RECOMMENDED_SET = { bb: [0, 1], cp: [0, 1, 2], ps: [0] };
+const optionName = name => name.replace(" (recommended)", "");
 function resourceCount(resource) { return Number(resource.count) || 0; }
 function unitName(resource, i) { return resource.unitLabel === "Chapter" ? `Ch. ${i + 1}` : `${resource.unitLabel} ${i + 1}`; }
+function unitRange(resource, units) {
+  const first = units[0] + 1, last = units.at(-1) + 1;
+  if (first === last) return unitName(resource, units[0]);
+  return resource.unitLabel === "Chapter" ? `Ch. ${first}–${last}` : `${resource.unitLabel}s ${first}–${last}`;
+}
 function contentDoneSet(id) { return new Set(state.contentDone[id] || []); }
 function setContentDone(id, unit, done) {
   const set = contentDoneSet(id);
@@ -613,7 +633,7 @@ function setContentDone(id, unit, done) {
   state.contentDone[id] = [...set].sort((a, b) => a - b);
 }
 function sectionShort(key) { return CONTENT_SECTIONS.find(section => section.key === key)?.short || key; }
-function newResource(section, title, unitLabel, count) { return { id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, section, source: "", title, unitLabel, count }; }
+function newResource(section, title, unitLabel, count, effort) { return { id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, section, source: "", title, unitLabel, count, ...(effort ? { effort } : {}) }; }
 function resourceTitle(resource) { return [resource.source, resource.title].filter(Boolean).join(" "); }
 
 let contentAddSection = null;
@@ -624,7 +644,7 @@ function contentSetupMarkup() {
       const done = contentDoneSet(resource.id).size;
       return `<div class="content-row">
         <span class="content-name">${esc(resourceTitle(resource))}</span>
-        <label class="content-count"><input type="number" min="1" max="400" value="${resourceCount(resource)}" data-resource-count="${resource.id}" aria-label="How many ${esc(resource.unitLabel.toLowerCase())}s">${esc(resource.unitLabel.toLowerCase())}s</label>
+        <label class="content-count"><input type="number" min="1" max="2000" value="${resourceCount(resource)}" data-resource-count="${resource.id}" aria-label="How many ${esc(resource.unitLabel.toLowerCase())}s">${esc(resource.unitLabel.toLowerCase())}s</label>
         <span class="content-done">${done ? `${done} done` : ""}</span>
         <button type="button" class="task-delete" data-remove-resource="${resource.id}" aria-label="Remove ${esc(resourceTitle(resource))}">&times;</button>
       </div>`;
@@ -634,8 +654,8 @@ function contentSetupMarkup() {
     const addForm = adding ? `<div class="content-add" data-add-form="${section.key}">
         <select data-pick aria-label="Resource">${options.map(([name], i) => `<option value="${i}">${esc(name)}</option>`).join("")}<option value="other">Something else…</option></select>
         <input data-other class="hidden" placeholder="Name it (e.g. my notes)" aria-label="Resource name">
-        <input data-count type="number" min="1" max="400" value="${options[0][2] ?? ""}" placeholder="How many?" aria-label="How many">
-        <select data-unit aria-label="Unit type"><option value="Chapter">chapters</option><option value="Video">videos</option><option value="Lesson">lessons</option></select>
+        <input data-count type="number" min="1" max="2000" value="${options[0][2] ?? ""}" placeholder="How many?" aria-label="How many">
+        <select data-unit aria-label="Unit type"><option value="Chapter">chapters</option><option value="Video">videos</option><option value="Lesson">lessons</option><option value="Page">pages</option></select>
         <button type="button" class="btn primary small" data-save-resource="${section.key}">Add</button>
         <button type="button" class="btn ghost small" data-cancel-resource>Cancel</button>
       </div>` : `<button type="button" class="btn link add-link" data-open-add="${section.key}">+ Add ${rows ? "another" : "a resource"}</button>`;
@@ -644,13 +664,13 @@ function contentSetupMarkup() {
       <div class="content-section-body">${rows}${addForm}</div>
     </div>`;
   }).join("");
-  const kaplanButton = plan.resources.length ? "" : `<button type="button" class="btn kaplan-btn" data-content-kaplan>Use the Kaplan books <span class="muted">(recommended)</span></button>`;
+  const kaplanButton = plan.resources.length ? "" : `<button type="button" class="btn kaplan-btn" data-content-kaplan><span>Use the recommended setup</span><span class="muted">Kaplan books for B/B and C/P · Khan Academy videos for P/S</span></button>`;
   return `<section class="card setup-card content-setup" id="content-setup" style="--accent:var(--content-bb)">
     <h2 class="section-title">Content review</h2>
     <p class="muted setup-lead">Add what you're studying from — mix resources however you like. Your calendar starts with content review and gradually shifts into practice, spread across all the time you have.</p>
     ${kaplanButton}
     <div class="content-sections">${sections}</div>
-    <p class="setup-note">Kaplan books start at 12 chapters — change the number if your edition is different. Leave a section empty if you don't need content review for it.</p>
+    <p class="setup-note">Counts are pre-filled (Kaplan books at 12 chapters, Khan Academy at the full playlist) — change any number to match yours. Leave a section empty if you don't need content review for it.</p>
   </section>
   ${timelineMarkup()}
   <div class="setup-footer"><span class="muted">All set? Your calendar is built from everything above.</span>${hasPlan() ? '<button class="btn primary" data-action="update">↻ Update Calendar</button>' : '<button class="btn primary" data-action="generate">⚡ Generate Calendar</button>'}</div>`;
@@ -660,8 +680,8 @@ document.addEventListener("click", event => {
   const scroll = event.target.closest("[data-scroll]");
   if (scroll) { document.getElementById(scroll.dataset.scroll)?.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
   if (event.target.closest("[data-content-kaplan]")) {
-    Object.entries(KAPLAN_SET).forEach(([section, picks]) => picks.forEach(i => { const [name, unit, count] = CONTENT_OPTIONS[section][i]; state.content.resources.push(newResource(section, name, unit, count)); }));
-    refreshSetup("Kaplan books added."); return;
+    Object.entries(RECOMMENDED_SET).forEach(([section, picks]) => picks.forEach(i => { const [name, unit, count, effort] = CONTENT_OPTIONS[section][i]; state.content.resources.push(newResource(section, optionName(name), unit, count, effort)); }));
+    refreshSetup("Recommended setup added."); return;
   }
   const open = event.target.closest("[data-open-add]");
   if (open) { contentAddSection = open.dataset.openAdd; refreshSetup(); document.querySelector("[data-add-form] [data-pick]")?.focus(); return; }
@@ -670,11 +690,13 @@ document.addEventListener("click", event => {
   if (save) {
     const form = save.closest("[data-add-form]"); const section = save.dataset.saveResource;
     const pick = form.querySelector("[data-pick]").value;
-    const name = pick === "other" ? form.querySelector("[data-other]").value.trim() : CONTENT_OPTIONS[section][Number(pick)][0];
-    const count = Math.min(400, Number(form.querySelector("[data-count]").value) || 0);
+    const option = pick === "other" ? null : CONTENT_OPTIONS[section][Number(pick)];
+    const name = option ? optionName(option[0]) : form.querySelector("[data-other]").value.trim();
+    const count = Math.min(2000, Number(form.querySelector("[data-count]").value) || 0);
     if (!name) return showToast("Give it a name.");
     if (count < 1) return showToast("Enter how many there are.");
-    state.content.resources.push(newResource(section, name, form.querySelector("[data-unit]").value, count));
+    const unit = form.querySelector("[data-unit]").value;
+    state.content.resources.push(newResource(section, name, unit, count, option && option[1] === unit ? option[3] : undefined));
     contentAddSection = null; refreshSetup(`Added ${name}.`); return;
   }
   const remove = event.target.closest("[data-remove-resource]");
@@ -690,7 +712,7 @@ document.addEventListener("change", event => {
     (pick.value === "other" ? form.querySelector("[data-other]") : form.querySelector("[data-count]")).focus();
     return;
   }
-  if (event.target.matches("[data-resource-count]")) { const resource = state.content.resources.find(r => r.id === event.target.dataset.resourceCount); if (!resource) return; resource.count = Math.max(1, Math.min(400, Number(event.target.value) || 1)); state.contentDone[resource.id] = (state.contentDone[resource.id] || []).filter(i => i < resource.count); saveState(); }
+  if (event.target.matches("[data-resource-count]")) { const resource = state.content.resources.find(r => r.id === event.target.dataset.resourceCount); if (!resource) return; resource.count = Math.max(1, Math.min(2000, Number(event.target.value) || 1)); state.contentDone[resource.id] = (state.contentDone[resource.id] || []).filter(i => i < resource.count); saveState(); }
 });
 
 render();
