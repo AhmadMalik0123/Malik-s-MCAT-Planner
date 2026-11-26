@@ -421,15 +421,28 @@ function buildTasks(exam) {
   // ---- lay phases end to end across ALL available days, sized by workload, overlapping at each handoff ----
   const ranges = {};
   if (order.length) {
-    let cursor = 0;
-    const bounds = order.map(phase => { const start = cursor; cursor += N * effort[phase] / totalEffort; return { phase, start, end: cursor }; });
+    // Content must be finished before the first full length (but never more than 3 units a day);
+    // UWorld then AAMC share whatever time is left, in proportion to their workload.
+    const firstFL = flStart ? days.filter(date => date < flStart).length : N;
+    const minContentDays = Math.ceil(contentSlots.length / 3);
+    let contentEnd = order.includes("content") ? N * effort.content / totalEffort : 0;
+    if (order.includes("content") && order.length > 1) contentEnd = Math.min(contentEnd, Math.max(firstFL, minContentDays));
+    contentEnd = Math.min(N, contentEnd);
+    const practice = order.filter(phase => phase !== "content");
+    const practiceEffort = practice.reduce((total, phase) => total + effort[phase], 0);
+    let cursor = contentEnd;
+    const bounds = [
+      ...(order.includes("content") ? [{ phase: "content", start: 0, end: contentEnd }] : []),
+      ...practice.map(phase => { const start = cursor; cursor += (N - contentEnd) * effort[phase] / practiceEffort; return { phase, start, end: cursor }; })
+    ];
     const overlap = Math.max(2, Math.min(21, Math.round(N * 0.12)));
     bounds.forEach((bound, i) => {
       const prev = bounds[i - 1], next = bounds[i + 1];
       const inLen = prev ? Math.min(overlap, (bound.end - bound.start) / 2, (prev.end - prev.start) / 2) : 0;
       const outLen = next ? Math.min(overlap, (bound.end - bound.start) / 2, (next.end - next.start) / 2) : 0;
-      const start = Math.max(0, Math.floor(bound.start - inLen / 2));
-      const end = Math.min(N, Math.ceil(bound.end + outLen / 2));
+      // content never spills past its end; the next phase ramps in earlier instead
+      const start = Math.max(0, Math.floor(bound.start - (prev?.phase === "content" ? inLen : inLen / 2)));
+      const end = Math.min(N, bound.phase === "content" ? Math.ceil(bound.end) : Math.ceil(bound.end + outLen / 2));
       ranges[bound.phase] = { start, end, weights: phaseWeights(start, end, Math.round(inLen), Math.round(outLen)) };
     });
   }
