@@ -6,6 +6,9 @@
   const MODE_KEY = "mcat-mode";
   const fadeOnce = () => { const fade = document.createElement("div"); fade.className = "theme-fade"; document.body.appendChild(fade); fade.addEventListener("animationend", () => fade.remove()); };
   document.addEventListener("click", event => {
+    const sw = document.querySelector(".theme-switch");
+    if (event.target.closest("[data-theme-open]")) { sw.classList.toggle("open"); return; }
+    if (sw && !event.target.closest(".theme-switch")) sw.classList.remove("open");
     if (event.target.closest("[data-mode-toggle]")) {
       const light = document.documentElement.dataset.mode !== "light";
       fadeOnce();
