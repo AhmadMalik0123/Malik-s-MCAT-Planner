@@ -812,3 +812,6 @@ html[data-mode="light"] .splash-dot { fill: rgb(var(--a2)); }
 @media (max-width: 620px) { .auth-pulse { width: 64px; } .auth-brand { margin-bottom: 10px; } .auth-card > p.muted { font-size: 13px; } }
 .auth-pulse .pulse-base { stroke-dasharray: none; animation: none; filter: none; }
 .splash-greeting { bottom: 52px; }
+/* clear the notch / status bar when launched from the home screen */
+.topbar { padding-top: max(10px, env(safe-area-inset-top)); padding-left: max(clamp(16px, 3vw, 40px), env(safe-area-inset-left)); padding-right: max(clamp(16px, 3vw, 40px), env(safe-area-inset-right)); }
+@media (max-width: 620px) { .topbar { padding-top: max(8px, env(safe-area-inset-top)); padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); } }
