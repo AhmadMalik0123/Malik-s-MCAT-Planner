@@ -270,8 +270,7 @@ const VIEW_RENDERERS = {
   setup: () => { renderSetup(); enhanceUnavailablePicker(); },
   calendar: renderCalendar,
   progress: () => { renderProgress(); enhanceSubsectionScores(); enhanceMainScoreGraph(); },
-  review: renderReview,
-  content: renderContent
+  review: renderReview
 };
 function hasPlan() { return Object.keys(state.tasks).length > 0; }
 function greetingText() { const hour = new Date().getHours(); return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"; }
@@ -322,9 +321,9 @@ function renderSetup() {
   const select = (section, total) => { const savedPercent = total ? Math.round(targetFor(section) / total * 100) : 0; return `<select>${[0, 25, 50, 75, 100].map(value => `<option value="${value}" ${value === savedPercent ? "selected" : ""}>${value}%</option>`).join("")}</select>`; };
   const targetRows = (group, key) => Object.entries(group).map(([section, total]) => `<div class="target-row"><strong style="color:${COLORS[section]}">${section}</strong><small>${total} questions</small>${select(section, total)}</div>`).join("");
   document.querySelector("#setup").innerHTML = `<div class="page-head"><div><div class="page-kicker">Plan with intention</div><h1>Build your MCAT plan</h1><p class="muted">Pick your exam date, set your targets, choose your content review, then generate.</p></div><div class="head-actions"><span class="save-status">● Saved automatically</span><button class="btn primary" data-action="generate">⚡ Generate Calendar</button></div></div>
-    <ol class="steps"><li><span>1</span>Exam date &amp; breaks</li><li><span>2</span>UWorld &amp; AAMC targets</li><li class="step-link" data-view="content"><span>3</span>Content review →</li><li><span>4</span>Generate calendar</li></ol>
+    <ol class="steps"><li><span>1</span>Exam date &amp; breaks</li><li><span>2</span>UWorld &amp; AAMC targets</li><li class="step-link" data-scroll="content-setup"><span>3</span>Content review</li><li><span>4</span>Generate calendar</li></ol>
     <div class="grid setup-grid"><section class="card setup-card setup-main" style="--accent:var(--teal)"><h2 class="section-title">Exam and schedule</h2><p class="muted setup-lead">Your anchor date controls every full length, break, and workload deadline.</p><div class="form-grid"><label>Exam date<input id="exam-date" type="date" value="${state.examDate}"></label><label>Full-length weekday<select id="fl-day" class="full-length-control">${DAY_NAMES.slice(1).concat(DAY_NAMES[0]).map(day => `<option ${day === state.fullLengthDay ? "selected" : ""}>${day}</option>`).join("")}</select></label></div><div class="exam-date-card"><div><div class="muted">Selected MCAT exam date</div><strong>${state.examDate ? formatDate(parseDate(state.examDate)) : "Choose an exam date"}</strong></div></div><div class="setup-note">The day before the MCAT is automatically protected as a break.</div><h3 style="margin-top:18px">Weekly break days</h3><div class="checks">${DAY_NAMES.map(day => `<label><input type="checkbox" data-break="${day}" ${state.breaks.includes(day) ? "checked" : ""}>${day.slice(0, 3)}</label>`).join("")}</div><label style="margin-top:16px">Unavailable dates, comma-separated<textarea id="unavailable" rows="3" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:5px">${esc(state.unavailable)}</textarea></label></section>
-    <section class="card setup-card setup-secondary" style="--accent:var(--uw-cp)"><h2 class="section-title">UWorld targets</h2>${targetRows(TOTALS.uworld, "uworld")}<button class="btn link" data-link="https://www.uworld.com/?srsltid=AU7gw4V3fQJIo5Tajbd8fYy4dEsrb_l3rlcHE4yjxfZssxWl5L95cHku">Open UWorld MCAT ↗</button><p class="setup-note">UWorld CARS defaults to 100%. AAMC CARS is scheduled separately as 3 passages per day.</p></section><section class="card setup-card setup-secondary" style="--accent:var(--aamc-cp)"><h2 class="section-title">AAMC targets</h2>${targetRows(Object.fromEntries(Object.entries(TOTALS.aamc).filter(([section]) => section !== "AAMC CARS")), "aamc")}<button class="btn link" data-link="https://students-residents.aamc.org/prepare-mcat-exam/aamc-mcat-official-prep-updates">Open AAMC Prep Hub ↗</button><p class="setup-note">AAMC CARS includes all 575 questions and is displayed as passages.</p></section></div>`;
+    <section class="card setup-card setup-secondary" style="--accent:var(--uw-cp)"><h2 class="section-title">UWorld targets</h2>${targetRows(TOTALS.uworld, "uworld")}<button class="btn link" data-link="https://www.uworld.com/?srsltid=AU7gw4V3fQJIo5Tajbd8fYy4dEsrb_l3rlcHE4yjxfZssxWl5L95cHku">Open UWorld MCAT ↗</button><p class="setup-note">UWorld CARS defaults to 100%. AAMC CARS is scheduled separately as 3 passages per day.</p></section><section class="card setup-card setup-secondary" style="--accent:var(--aamc-cp)"><h2 class="section-title">AAMC targets</h2>${targetRows(Object.fromEntries(Object.entries(TOTALS.aamc).filter(([section]) => section !== "AAMC CARS")), "aamc")}<button class="btn link" data-link="https://students-residents.aamc.org/prepare-mcat-exam/aamc-mcat-official-prep-updates">Open AAMC Prep Hub ↗</button><p class="setup-note">AAMC CARS includes all 575 questions and is displayed as passages.</p></section></div>${contentSetupMarkup()}`;
 }
 
 function unavailableDates() { return state.unavailable.split(",").map(value => value.trim()).filter(Boolean).sort(); }
@@ -541,73 +540,43 @@ document.addEventListener("change", event => { if (event.target.matches("[data-s
 document.addEventListener("click", event => { const tab = event.target.closest("[data-section-tab]"); if (!tab) return; const block = tab.closest(".subsection-score-block"); block.querySelectorAll("[data-section-tab]").forEach(button => button.classList.toggle("active", button === tab)); block.querySelectorAll("[data-section-graph]").forEach(graph => graph.classList.toggle("active", graph.dataset.sectionGraph === tab.dataset.sectionTab)); });
 document.addEventListener("click", event => { const tab = event.target.closest("[data-full-graph-tab]"); if (!tab) return; const area = tab.closest(".full-graph-area"); area.querySelectorAll("[data-full-graph-tab]").forEach(button => button.classList.toggle("active", button === tab)); area.querySelectorAll("[data-full-graph]").forEach(graph => graph.classList.toggle("active", graph.dataset.fullGraph === tab.dataset.fullGraphTab)); });
 document.addEventListener("click", event => { const add = event.target.closest("[data-add-review]"); if (add) { const source = document.querySelector("#review-source").value.trim(); const question = document.querySelector("#review-question").value.trim(); if (!source || !question) return showToast("Add the exam or QPack and question number first."); state.reviews.unshift({ id: Date.now(), source, question, chosen: document.querySelector("#review-chosen").value.trim() || "--", correct: document.querySelector("#review-correct").value.trim() || "--", whyChosen: document.querySelector("#review-why").value.trim() || "Not recorded", reason: document.querySelector("#review-reason").value, explanation: document.querySelector("#review-explanation").value.trim() || "Not recorded" }); saveState(); render(); showToast("Question review saved."); } const remove = event.target.closest("[data-delete-review]"); if (remove) { state.reviews = state.reviews.filter(review => String(review.id) !== remove.dataset.deleteReview); saveState(); render(); showToast("Question review deleted."); } });
-document.addEventListener("change", event => { if (event.target.closest("#setup")) { readSetup(); saveState(); showToast("Setup saved automatically."); } });
-document.addEventListener("input", event => { if (event.target.closest("#setup")) { readSetup(); saveState(); } });
+document.addEventListener("change", event => { if (event.target.closest("#setup") && !event.target.closest("#content-setup")) { readSetup(); saveState(); showToast("Setup saved automatically."); } });
+document.addEventListener("input", event => { if (event.target.closest("#setup") && !event.target.closest("#content-setup")) { readSetup(); saveState(); } });
 document.addEventListener("change", event => { if (event.target.matches("#import-data") && event.target.files[0]) importPlan(event.target.files[0]); });
 document.addEventListener("click", event => { const add = event.target.closest("[data-add-unavailable]"); if (add) { const input = document.querySelector("#unavailable-date"); if (!input.value) return; state.unavailable = [...new Set([...unavailableDates(), input.value])].sort().join(", "); saveState(); render(); showToast("Unavailable date added."); } const remove = event.target.closest("[data-remove-unavailable]"); if (remove) { state.unavailable = unavailableDates().filter(date => date !== remove.dataset.removeUnavailable).join(", "); saveState(); render(); showToast("Unavailable date removed."); } });
 
 /* ============================================================
-   Content review: recommended or self-built resource lists per section,
-   scheduled into the calendar unit by unit.
+   Content review (lives in Setup): pick a resource per section,
+   say how many chapters/videos, and the calendar assigns them day by day.
    ============================================================ */
 const CONTENT_SECTIONS = [
   { key: "bb", label: "Bio/Biochem", short: "B/B", color: "var(--content-bb)" },
   { key: "cp", label: "Chem/Phys", short: "C/P", color: "var(--content-cp)" },
   { key: "ps", label: "Psych/Soc", short: "P/S", color: "var(--content-ps)" }
 ];
-const UNIT_TYPES = ["Chapter", "Video", "Lesson", "Unit", "Topic", "Section", "Module"];
-const AAMC_OUTLINE = {
-  bb: ["1A Proteins & amino acids", "1B Gene to protein", "1C Heredity & genetic diversity", "1D Bioenergetics & metabolism", "2A Cells & tissues", "2B Prokaryotes & viruses", "2C Cell division & differentiation", "3A Nervous & endocrine systems", "3B Major organ systems"],
-  cp: ["4A Motion, forces, work & energy", "4B Fluids & gas exchange", "4C Electrochemistry & circuits", "4D Light & sound", "4E Atoms, nuclear decay & electrons", "5A Water & solutions", "5B Molecules & intermolecular forces", "5C Separation & purification", "5D Biological molecules & reactivity", "5E Thermodynamics & kinetics"],
-  ps: ["6A Sensing the environment", "6B Making sense of the environment", "6C Responding to the world", "7A Individual influences on behavior", "7B Social processes & behavior", "7C Attitude & behavior change", "8A Self-identity", "8B Social thinking", "8C Social interactions", "9A Social structure", "9B Demographics", "10A Social inequality"]
+// Kaplan counts are editable defaults: editions differ.
+const CONTENT_OPTIONS = {
+  bb: [["Kaplan Biology Review", "Chapter", 12], ["Kaplan Biochemistry Review", "Chapter", 12], ["Khan Academy", "Video"], ["Blueprint", "Chapter"], ["Princeton Review", "Chapter"]],
+  cp: [["Kaplan General Chemistry Review", "Chapter", 12], ["Kaplan Organic Chemistry Review", "Chapter", 12], ["Kaplan Physics & Math Review", "Chapter", 12], ["Khan Academy", "Video"], ["Blueprint", "Chapter"], ["Princeton Review", "Chapter"]],
+  ps: [["Kaplan Behavioral Sciences Review", "Chapter", 12], ["Khan Academy", "Video"], ["Blueprint", "Chapter"], ["Princeton Review", "Chapter"]]
 };
-// Chapter counts are editable defaults: editions differ, so students confirm against their own books.
-const CONTENT_PRESETS = [
-  { id: "kaplan-bio", section: "bb", source: "Kaplan", title: "Biology Review", unitLabel: "Chapter", count: 12 },
-  { id: "kaplan-biochem", section: "bb", source: "Kaplan", title: "Biochemistry Review", unitLabel: "Chapter", count: 12 },
-  { id: "kaplan-genchem", section: "cp", source: "Kaplan", title: "General Chemistry Review", unitLabel: "Chapter", count: 12 },
-  { id: "kaplan-orgo", section: "cp", source: "Kaplan", title: "Organic Chemistry Review", unitLabel: "Chapter", count: 12 },
-  { id: "kaplan-physics", section: "cp", source: "Kaplan", title: "Physics & Math Review", unitLabel: "Chapter", count: 12 },
-  { id: "kaplan-behavioral", section: "ps", source: "Kaplan", title: "Behavioral Sciences Review", unitLabel: "Chapter", count: 12 },
-  { id: "aamc-bb", section: "bb", source: "AAMC", title: "Content Outline (B/B)", unitLabel: "Category", names: AAMC_OUTLINE.bb },
-  { id: "aamc-cp", section: "cp", source: "AAMC", title: "Content Outline (C/P)", unitLabel: "Category", names: AAMC_OUTLINE.cp },
-  { id: "aamc-ps", section: "ps", source: "AAMC", title: "Content Outline (P/S)", unitLabel: "Category", names: AAMC_OUTLINE.ps },
-  { id: "khan-bb", section: "bb", source: "Khan Academy", title: "Bio/Biochem videos", unitLabel: "Video" },
-  { id: "khan-cp", section: "cp", source: "Khan Academy", title: "Chem/Phys videos", unitLabel: "Video" },
-  { id: "khan-ps", section: "ps", source: "Khan Academy", title: "Psych/Soc videos", unitLabel: "Video" },
-  { id: "blueprint-bb", section: "bb", source: "Blueprint", title: "Bio/Biochem", unitLabel: "Chapter" },
-  { id: "blueprint-cp", section: "cp", source: "Blueprint", title: "Chem/Phys", unitLabel: "Chapter" },
-  { id: "blueprint-ps", section: "ps", source: "Blueprint", title: "Psych/Soc", unitLabel: "Chapter" },
-  { id: "tpr-bb", section: "bb", source: "Princeton Review", title: "Biology & Biochemistry", unitLabel: "Chapter" },
-  { id: "tpr-cp", section: "cp", source: "Princeton Review", title: "Gen Chem, Orgo & Physics", unitLabel: "Chapter" },
-  { id: "tpr-ps", section: "ps", source: "Princeton Review", title: "Psychology & Sociology", unitLabel: "Chapter" }
-];
-const RECOMMENDED_SETS = {
-  kaplan: ["kaplan-bio", "kaplan-biochem", "kaplan-genchem", "kaplan-orgo", "kaplan-physics", "kaplan-behavioral"],
-  aamc: ["aamc-bb", "aamc-cp", "aamc-ps"]
-};
-function resourceCount(resource) { return Number(resource.count) || resource.names?.length || 0; }
-function unitName(resource, i) {
-  const named = resource.names?.[i];
-  const prefix = resource.unitLabel === "Chapter" ? `Ch. ${i + 1}` : `${resource.unitLabel} ${i + 1}`;
-  return named ? (resource.source === "AAMC" ? named : `${prefix}: ${named}`) : prefix;
-}
+const KAPLAN_SET = { bb: [0, 1], cp: [0, 1, 2], ps: [0] };
+function resourceCount(resource) { return Number(resource.count) || 0; }
+function unitName(resource, i) { return resource.unitLabel === "Chapter" ? `Ch. ${i + 1}` : `${resource.unitLabel} ${i + 1}`; }
 function contentDoneSet(id) { return new Set(state.contentDone[id] || []); }
 function setContentDone(id, unit, done) {
   const set = contentDoneSet(id);
   if (done) set.add(unit); else set.delete(unit);
   state.contentDone[id] = [...set].sort((a, b) => a - b);
-  // keep any scheduled task for the same unit in step
-  Object.values(state.tasks).flat().forEach(task => { if (task.contentId === id && task.unit === unit) task.done = done; });
 }
 function sectionShort(key) { return CONTENT_SECTIONS.find(section => section.key === key)?.short || key; }
-function makeResource(fields) { return { id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, ...fields }; }
-function presetToResource(preset) { return makeResource({ section: preset.section, source: preset.source, title: preset.title, unitLabel: preset.unitLabel, count: preset.names ? preset.names.length : preset.count, names: preset.names ? [...preset.names] : [] }); }
+function newResource(section, title, unitLabel, count) { return { id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, section, source: "", title, unitLabel, count }; }
+function resourceTitle(resource) { return [resource.source, resource.title].filter(Boolean).join(" "); }
 
 function scheduleContent(tasks, days, uworldStart, preFLDays) {
   const plan = state.content;
   if (!plan?.schedule || !plan.resources.length || !days.length) return;
-  // spread each resource's remaining units evenly through the sequence so every day mixes sources and sections
+  // spread each resource's remaining units evenly so every day mixes sections
   const slots = [];
   plan.resources.forEach(resource => {
     const done = contentDoneSet(resource.id);
@@ -618,133 +587,96 @@ function scheduleContent(tasks, days, uworldStart, preFLDays) {
   slots.sort((a, b) => a.position - b.position || CONTENT_SECTIONS.findIndex(s => s.key === a.resource.section) - CONTENT_SECTIONS.findIndex(s => s.key === b.resource.section));
   const total = slots.length;
   const pace = Number(plan.pace);
-  // auto: finish content before the first full length; never more than 3 units a day
+  // auto: finish before the first full length, never more than 3 a day
   const window = Math.max(1, Math.min(days.length, pace > 0 ? Math.ceil(total / pace) : Math.max(preFLDays || uworldStart, Math.ceil(total / 3))));
   for (let d = 0; d < window; d++) {
     for (let k = Math.floor(d * total / window); k < Math.floor((d + 1) * total / window); k++) {
       const { resource, unit } = slots[k];
-      addTask(tasks, days[d], `Content ${sectionShort(resource.section)}`, `${resource.source} ${resource.title} · ${unitName(resource, unit)}`, { contentId: resource.id, unit });
+      addTask(tasks, days[d], `Content ${sectionShort(resource.section)}`, `${resourceTitle(resource)} · ${unitName(resource, unit)}`, { contentId: resource.id, unit });
     }
   }
 }
-function contentEstimate() {
-  const remaining = state.content.resources.reduce((sum, resource) => sum + resourceCount(resource) - contentDoneSet(resource.id).size, 0);
-  const scheduled = Object.values(state.tasks).flat().filter(task => task.contentId !== undefined);
-  const dates = [...new Set(scheduled.map(task => task.date))].sort();
-  return { remaining, scheduled: scheduled.length, first: dates[0], last: dates.at(-1), perDay: dates.length ? (scheduled.length / dates.length).toFixed(1) : "--" };
-}
 
 let contentAddSection = null;
-function renderContent() {
-  const view = document.querySelector("#content");
+function contentSetupMarkup() {
   const plan = state.content;
-  const resources = plan.resources;
-  const totalUnits = resources.reduce((sum, r) => sum + resourceCount(r), 0);
-  const doneUnits = resources.reduce((sum, r) => sum + contentDoneSet(r.id).size, 0);
-  const pct = totalUnits ? Math.round(doneUnits / totalUnits * 100) : 0;
-  const est = contentEstimate();
-  const quickStart = resources.length ? "" : `
-    <section class="card quickstart">
-      <div class="card-head"><h2>Start with a recommended setup</h2><span class="pill">Editable</span></div>
-      <p class="muted">Pick one to load it, then change anything below — swap a section to Khan Academy, edit chapter counts to match your edition, or add your own resources.</p>
-      <div class="preset-grid">
-        <button type="button" class="preset-card recommended" data-content-set="kaplan"><span class="badge">Recommended</span><strong>Kaplan 7-book set</strong><span class="muted">6 science books · chapter by chapter</span></button>
-        <button type="button" class="preset-card" data-content-set="aamc"><strong>AAMC content outline</strong><span class="muted">31 official categories · works with any resource</span></button>
-        <button type="button" class="preset-card" data-content-custom><strong>Build my own</strong><span class="muted">Mix and match any books, videos, or notes</span></button>
-      </div>
-    </section>`;
-  const sectionCards = CONTENT_SECTIONS.map(section => {
-    const list = resources.filter(r => r.section === section.key);
-    const rows = list.map(resource => {
-      const count = resourceCount(resource);
-      const done = contentDoneSet(resource.id);
-      const chips = Array.from({ length: count }, (_, i) => `<button type="button" class="unit-chip ${done.has(i) ? "done" : ""}" data-unit-toggle="${resource.id}" data-unit="${i}" title="${esc(unitName(resource, i))}">${i + 1}</button>`).join("");
-      const rpct = count ? Math.round(done.size / count * 100) : 0;
-      return `<div class="resource">
-        <div class="resource-head"><div><span class="resource-source">${esc(resource.source)}</span><strong>${esc(resource.title)}</strong></div>
-          <div class="resource-meta"><span>${done.size}/${count} ${esc(resource.unitLabel.toLowerCase())}s</span>
-            <label class="count-edit" title="Number of ${esc(resource.unitLabel.toLowerCase())}s">${resource.names?.length && resource.source === "AAMC" ? "" : `<input type="number" min="1" max="400" value="${count}" data-resource-count="${resource.id}" aria-label="Number of units">`}</label>
-            <button type="button" class="task-delete" data-remove-resource="${resource.id}" aria-label="Remove ${esc(resource.title)}">&times;</button></div></div>
-        <div class="progress-track"><div class="progress-fill" style="width:${rpct}%;background:${section.color}"></div></div>
-        <div class="unit-grid">${chips}</div>
+  const sections = CONTENT_SECTIONS.map(section => {
+    const rows = plan.resources.filter(r => r.section === section.key).map(resource => {
+      const done = contentDoneSet(resource.id).size;
+      return `<div class="content-row">
+        <span class="content-name">${esc(resourceTitle(resource))}</span>
+        <label class="content-count"><input type="number" min="1" max="400" value="${resourceCount(resource)}" data-resource-count="${resource.id}" aria-label="How many ${esc(resource.unitLabel.toLowerCase())}s">${esc(resource.unitLabel.toLowerCase())}s</label>
+        <span class="content-done">${done ? `${done} done` : ""}</span>
+        <button type="button" class="task-delete" data-remove-resource="${resource.id}" aria-label="Remove ${esc(resourceTitle(resource))}">&times;</button>
       </div>`;
     }).join("");
-    const presets = CONTENT_PRESETS.filter(preset => preset.section === section.key);
+    const options = CONTENT_OPTIONS[section.key];
     const adding = contentAddSection === section.key;
-    const form = adding ? `<div class="add-resource" data-add-form="${section.key}">
-        <label>Start from<select data-preset-pick="${section.key}"><option value="">Custom resource</option>${presets.map(preset => `<option value="${preset.id}">${esc(preset.source)} — ${esc(preset.title)}</option>`).join("")}</select></label>
-        <div class="add-grid">
-          <label>Source<input data-f="source" placeholder="e.g. Khan Academy, my notes"></label>
-          <label>Name<input data-f="title" placeholder="e.g. Amino acids playlist"></label>
-          <label>Unit type<select data-f="unitLabel">${UNIT_TYPES.map(type => `<option>${type}</option>`).join("")}</select></label>
-          <label>How many?<input data-f="count" type="number" min="1" max="400" placeholder="12"></label>
-        </div>
-        <label>Unit names <span class="muted">(optional, one per line — otherwise numbered)</span><textarea data-f="names" rows="3" placeholder="Amino Acids&#10;Enzymes&#10;Nonenzymatic Proteins"></textarea></label>
-        <div class="actions"><button type="button" class="btn primary" data-save-resource="${section.key}">Add to ${section.short}</button><button type="button" class="btn ghost" data-cancel-resource>Cancel</button></div>
-      </div>` : `<button type="button" class="btn add-btn" data-open-add="${section.key}">+ Add resource</button>`;
-    return `<section class="card content-card" style="--accent:${section.color}">
-      <div class="card-head"><h2><span class="sec-dot" style="background:${section.color}"></span>${section.label}</h2><span class="pill">${list.reduce((s, r) => s + contentDoneSet(r.id).size, 0)}/${list.reduce((s, r) => s + resourceCount(r), 0)}</span></div>
-      ${rows || '<p class="muted empty-line">No resources yet for this section.</p>'}
-      ${form}
-    </section>`;
+    const addForm = adding ? `<div class="content-add" data-add-form="${section.key}">
+        <select data-pick aria-label="Resource">${options.map(([name], i) => `<option value="${i}">${esc(name)}</option>`).join("")}<option value="other">Something else…</option></select>
+        <input data-other class="hidden" placeholder="Name it (e.g. my notes)" aria-label="Resource name">
+        <input data-count type="number" min="1" max="400" value="${options[0][2] ?? ""}" placeholder="How many?" aria-label="How many">
+        <select data-unit aria-label="Unit type"><option value="Chapter">chapters</option><option value="Video">videos</option><option value="Lesson">lessons</option></select>
+        <button type="button" class="btn primary small" data-save-resource="${section.key}">Add</button>
+        <button type="button" class="btn ghost small" data-cancel-resource>Cancel</button>
+      </div>` : `<button type="button" class="btn link add-link" data-open-add="${section.key}">+ Add ${rows ? "another" : "a resource"}</button>`;
+    return `<div class="content-section" style="--accent:${section.color}">
+      <div class="content-section-label"><span class="sec-dot"></span>${section.label}</div>
+      <div class="content-section-body">${rows}${addForm}</div>
+    </div>`;
   }).join("");
-  const scheduleNote = !plan.schedule ? "Content is tracked here only — it won't appear on your calendar."
-    : !hasPlan() ? "Generate your calendar to schedule these."
-    : est.scheduled ? `${est.scheduled} ${est.scheduled === 1 ? "unit" : "units"} scheduled · about ${est.perDay}/day · ${formatDate(parseDate(est.first))} → ${formatDate(parseDate(est.last))}`
-    : est.remaining ? "Click Update Calendar to schedule your changes." : "Everything here is done. 🎉";
-  view.innerHTML = `
-    <div class="page-head"><div><div class="page-kicker">Content review</div><h1>Your content plan</h1><p class="muted">Choose how you review each section. The calendar tells you exactly what to cover each day.</p></div>
-      <div class="head-actions">${hasPlan() ? '<button class="btn primary" data-action="update">↻ Update Calendar</button>' : '<button class="btn primary" data-action="generate">⚡ Generate Calendar</button>'}</div></div>
-    <section class="stat-row content-stats">
-      <div class="stat stat-exam"><span class="stat-label">Content complete</span><strong>${pct}<small>%</small></strong><span class="stat-sub">${doneUnits} of ${totalUnits} units</span></div>
-      <div class="stat"><span class="stat-label">Resources</span><strong>${resources.length}</strong><span class="stat-sub">${[...new Set(resources.map(r => r.source))].join(" + ") || "None yet"}</span></div>
-      <div class="stat stat-wide"><span class="stat-label">Schedule</span>
-        <div class="schedule-controls">
-          <label class="switch"><input type="checkbox" data-content-schedule ${plan.schedule ? "checked" : ""}><span></span>Add to calendar</label>
-          <select data-content-pace ${plan.schedule ? "" : "disabled"}><option value="auto" ${plan.pace === "auto" ? "selected" : ""}>Auto — finish before full lengths</option>${[1, 2, 3, 4].map(n => `<option value="${n}" ${String(plan.pace) === String(n) ? "selected" : ""}>${n} per day</option>`).join("")}</select>
-        </div><span class="stat-sub">${scheduleNote}</span></div>
-    </section>
-    ${quickStart}
-    <div class="grid content-grid">${sectionCards}</div>
-    <p class="muted content-foot">Tip: click any numbered chip to mark it done. Units you finish are skipped next time the calendar updates. Kaplan chapter counts are pre-filled at 12; adjust them to match your edition.</p>`;
+  const kaplanButton = plan.resources.length ? "" : `<button type="button" class="btn kaplan-btn" data-content-kaplan>Use the Kaplan books <span class="muted">(recommended)</span></button>`;
+  return `<section class="card setup-card content-setup" id="content-setup" style="--accent:var(--content-bb)">
+    <h2 class="section-title">Content review</h2>
+    <p class="muted setup-lead">Tell us what you're studying from. Mix resources however you like — the calendar will assign chapters or videos each day.</p>
+    <div class="content-toolbar">
+      <label class="switch"><input type="checkbox" data-content-schedule ${plan.schedule ? "checked" : ""}><span></span>Put content review on my calendar</label>
+      <label class="pace">Pace<select data-content-pace ${plan.schedule ? "" : "disabled"}><option value="auto" ${plan.pace === "auto" ? "selected" : ""}>Finish before full lengths</option>${[1, 2, 3].map(n => `<option value="${n}" ${String(plan.pace) === String(n) ? "selected" : ""}>${n} per day</option>`).join("")}</select></label>
+    </div>
+    ${kaplanButton}
+    <div class="content-sections">${sections}</div>
+    <p class="setup-note">Kaplan books start at 12 chapters — change the number if your edition is different. Check items off on the Today page and they won't be scheduled again.</p>
+  </section>
+  <div class="setup-footer"><span class="muted">All set? Your calendar is built from everything above.</span>${hasPlan() ? '<button class="btn primary" data-action="update">↻ Update Calendar</button>' : '<button class="btn primary" data-action="generate">⚡ Generate Calendar</button>'}</div>`;
 }
-function readResourceForm(sectionKey) {
-  const form = document.querySelector(`[data-add-form="${sectionKey}"]`);
-  const field = name => form.querySelector(`[data-f="${name}"]`).value.trim();
-  const names = field("names").split("\n").map(line => line.trim()).filter(Boolean);
-  const count = names.length || Number(field("count"));
-  const title = field("title"), source = field("source") || "Custom";
-  if (!title) return showToast("Give the resource a name.");
-  if (!count || count < 1) return showToast("Enter how many units it has.");
-  return makeResource({ section: sectionKey, source, title, unitLabel: field("unitLabel"), count, names });
-}
-function contentChanged(message) { saveState(); renderContent(); if (message) showToast(message); }
+function refreshSetup(message) { saveState(); renderSetup(); enhanceUnavailablePicker(); if (message) showToast(message); }
 document.addEventListener("click", event => {
-  const set = event.target.closest("[data-content-set]");
-  if (set) { RECOMMENDED_SETS[set.dataset.contentSet].forEach(id => state.content.resources.push(presetToResource(CONTENT_PRESETS.find(p => p.id === id)))); contentChanged(hasPlan() ? "Loaded. Click Update Calendar to schedule it." : "Loaded. Generate your calendar to schedule it."); playEntrance(document.getElementById("content")); return; }
-  if (event.target.closest("[data-content-custom]")) { contentAddSection = "bb"; renderContent(); document.querySelector("[data-add-form] [data-f=source]")?.focus(); return; }
+  const scroll = event.target.closest("[data-scroll]");
+  if (scroll) { document.getElementById(scroll.dataset.scroll)?.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+  if (event.target.closest("[data-content-kaplan]")) {
+    Object.entries(KAPLAN_SET).forEach(([section, picks]) => picks.forEach(i => { const [name, unit, count] = CONTENT_OPTIONS[section][i]; state.content.resources.push(newResource(section, name, unit, count)); }));
+    refreshSetup("Kaplan books added."); return;
+  }
   const open = event.target.closest("[data-open-add]");
-  if (open) { contentAddSection = open.dataset.openAdd; renderContent(); document.querySelector("[data-add-form] select")?.focus(); return; }
-  if (event.target.closest("[data-cancel-resource]")) { contentAddSection = null; renderContent(); return; }
+  if (open) { contentAddSection = open.dataset.openAdd; refreshSetup(); document.querySelector("[data-add-form] [data-pick]")?.focus(); return; }
+  if (event.target.closest("[data-cancel-resource]")) { contentAddSection = null; refreshSetup(); return; }
   const save = event.target.closest("[data-save-resource]");
-  if (save) { const resource = readResourceForm(save.dataset.saveResource); if (!resource) return; state.content.resources.push(resource); contentAddSection = null; contentChanged(`Added ${resource.title}.`); return; }
+  if (save) {
+    const form = save.closest("[data-add-form]"); const section = save.dataset.saveResource;
+    const pick = form.querySelector("[data-pick]").value;
+    const name = pick === "other" ? form.querySelector("[data-other]").value.trim() : CONTENT_OPTIONS[section][Number(pick)][0];
+    const count = Math.min(400, Number(form.querySelector("[data-count]").value) || 0);
+    if (!name) return showToast("Give it a name.");
+    if (count < 1) return showToast("Enter how many there are.");
+    state.content.resources.push(newResource(section, name, form.querySelector("[data-unit]").value, count));
+    contentAddSection = null; refreshSetup(`Added ${name}.`); return;
+  }
   const remove = event.target.closest("[data-remove-resource]");
-  if (remove) { const id = remove.dataset.removeResource; state.content.resources = state.content.resources.filter(r => r.id !== id); delete state.contentDone[id]; Object.keys(state.tasks).forEach(key => { state.tasks[key] = state.tasks[key].filter(task => task.contentId !== id).map((task, index) => ({ ...task, index })); if (!state.tasks[key].length) delete state.tasks[key]; }); contentChanged("Resource removed."); return; }
-  const chip = event.target.closest("[data-unit-toggle]");
-  if (chip) { const id = chip.dataset.unitToggle, unit = Number(chip.dataset.unit); const done = !contentDoneSet(id).has(unit); setContentDone(id, unit, done); saveState(); chip.classList.toggle("done", done); chip.classList.add("pulse"); setTimeout(() => renderContent(), 260); }
+  if (remove) { const id = remove.dataset.removeResource; state.content.resources = state.content.resources.filter(r => r.id !== id); delete state.contentDone[id]; Object.keys(state.tasks).forEach(key => { state.tasks[key] = state.tasks[key].filter(task => task.contentId !== id).map((task, index) => ({ ...task, index })); if (!state.tasks[key].length) delete state.tasks[key]; }); refreshSetup("Removed."); }
 });
 document.addEventListener("change", event => {
-  const pick = event.target.closest("[data-preset-pick]");
+  const pick = event.target.closest("[data-pick]");
   if (pick) {
-    const form = pick.closest("[data-add-form]"); const preset = CONTENT_PRESETS.find(p => p.id === pick.value);
-    const set = (name, value) => { form.querySelector(`[data-f="${name}"]`).value = value ?? ""; };
-    set("source", preset?.source); set("title", preset?.title); set("unitLabel", preset?.unitLabel || "Chapter"); set("count", preset?.names ? preset.names.length : preset?.count); set("names", preset?.names?.join("\n"));
-    form.querySelector(preset && !preset.count && !preset.names ? '[data-f="count"]' : '[data-f="title"]').focus();
+    const form = pick.closest("[data-add-form]"); const option = CONTENT_OPTIONS[form.dataset.addForm][Number(pick.value)];
+    form.querySelector("[data-other]").classList.toggle("hidden", pick.value !== "other");
+    form.querySelector("[data-count]").value = option?.[2] ?? "";
+    form.querySelector("[data-unit]").value = option?.[1] || "Chapter";
+    (pick.value === "other" ? form.querySelector("[data-other]") : form.querySelector("[data-count]")).focus();
     return;
   }
-  if (event.target.matches("[data-content-schedule]")) { state.content.schedule = event.target.checked; contentChanged(hasPlan() ? "Saved. Click Update Calendar to apply." : ""); return; }
-  if (event.target.matches("[data-content-pace]")) { state.content.pace = event.target.value; contentChanged(hasPlan() ? "Pace saved. Click Update Calendar to apply." : ""); return; }
-  if (event.target.matches("[data-resource-count]")) { const resource = state.content.resources.find(r => r.id === event.target.dataset.resourceCount); if (!resource) return; const count = Math.max(1, Math.min(400, Number(event.target.value) || 1)); resource.count = count; if (resource.names?.length > count) resource.names = resource.names.slice(0, count); state.contentDone[resource.id] = (state.contentDone[resource.id] || []).filter(i => i < count); contentChanged("Count updated."); }
+  if (event.target.matches("[data-content-schedule]")) { state.content.schedule = event.target.checked; refreshSetup(); return; }
+  if (event.target.matches("[data-content-pace]")) { state.content.pace = event.target.value; saveState(); return; }
+  if (event.target.matches("[data-resource-count]")) { const resource = state.content.resources.find(r => r.id === event.target.dataset.resourceCount); if (!resource) return; resource.count = Math.max(1, Math.min(400, Number(event.target.value) || 1)); state.contentDone[resource.id] = (state.contentDone[resource.id] || []).filter(i => i < resource.count); saveState(); }
 });
 
 render();
