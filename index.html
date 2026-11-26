@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#040b0e">
   <meta name="color-scheme" content="dark light">
 <title>MCAT Planner</title>
@@ -14,6 +14,14 @@
   <meta property="og:description" content="Organize your MCAT study schedule, track practice questions and exams, monitor progress, and stay on track for test day.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mcatprepplanner.netlify.app/">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="MCAT Planner">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
@@ -57,6 +65,12 @@
       if (window.innerWidth > 640) { ecg.style.left = dx + "px"; ecg.style.right = -dx + "px"; }
       var hour = new Date().getHours();
       splash.querySelector(".sg-hello").textContent = (hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening") + ",";
+      // Size the greeting so it spans the same width as the logo lockup.
+      var greet = splash.querySelector(".splash-greeting"), logo = splash.querySelector(".splash-logo");
+      greet.style.width = "max-content";
+      var gw = greet.getBoundingClientRect().width, lw = logo.getBoundingClientRect().width;
+      if (gw && lw) greet.style.fontSize = Math.min(44, 22 * lw / gw) + "px";
+      greet.style.width = "";
       try { sessionStorage.setItem("mcat-splash", "1"); } catch (e) {}
       var done = false;
       function finish() { if (done) return; done = true; splash.classList.add("leaving"); setTimeout(function () { splash.remove(); }, 550); }
@@ -88,6 +102,7 @@
       <label class="import-control nav-util" title="Import a saved plan"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>Import<input id="import-data" type="file" accept="application/json"></label>
     </nav>
     <div class="theme-switch" role="group" aria-label="Color theme">
+      <button type="button" class="theme-open" data-theme-open aria-label="Change colors" title="Change colors"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2a10 10 0 0 0 0 20c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.4A5.6 5.6 0 0 0 22 9.8C22 5.5 17.5 2 12 2z"/></svg></button>
       <button type="button" class="theme-dot" data-theme-set="aurora" title="Aurora theme" aria-label="Aurora theme"></button>
       <button type="button" class="theme-dot" data-theme-set="nebula" title="Nebula theme" aria-label="Nebula theme"></button>
       <button type="button" class="theme-dot" data-theme-set="ember" title="Ember theme" aria-label="Ember theme"></button>
@@ -111,7 +126,10 @@
 
   <section id="auth-screen" class="auth-screen">
     <div class="auth-hero">
-      <div class="page-kicker">Your MCAT command center</div>
+      <div class="auth-brand">
+        <svg class="auth-pulse" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true"><path class="pulse-base" d="M0 20H70l8-14 10 28 8-14H200"/><path class="pulse-run" pathLength="1" d="M0 20H70l8-14 10 28 8-14H200"/></svg>
+        <span class="page-kicker">Your MCAT command center</span>
+      </div>
       <h1 class="hero-title">Study smarter.<br><span class="gradient-text">Score higher.</span></h1>
       <p class="muted">A day-by-day calendar built from your UWorld and AAMC targets, with progress tracking, full-length score trends, and question review in one place.</p>
       <ul class="hero-points">
