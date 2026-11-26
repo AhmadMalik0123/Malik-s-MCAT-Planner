@@ -317,7 +317,7 @@ function contentKicker(task) {
   if (task.contentId === undefined) return "";
   const resource = state.content.resources.find(r => r.id === task.contentId);
   const section = CONTENT_SECTIONS.find(c => c.short === task.section.replace("Content ", ""))?.label || "";
-  const kind = { Video: "videos", Lesson: "lessons", Page: "reading", Chapter: "reading" }[resource?.unitLabel] || "content";
+  const kind = { Video: "videos", Lesson: "lessons", Page: "reading", Chapter: "reading", Lecture: "reading" }[resource?.unitLabel] || "content";
   return `${section} ${kind}`.trim();
 }
 // Short label for calendar cells and the export, matching the Today checklist wording:
@@ -385,7 +385,7 @@ function generatePlan() { readSetup(); const exam = parseDate(state.examDate); i
 function availableDays(exam) { const days = []; const start = new Date(); start.setHours(12, 0, 0, 0); const unavailable = state.unavailable.split(",").map(value => value.trim()).filter(Boolean); for (let date = start; date < exam; date = addDays(date, 1)) { const key = dateKey(date); const preExam = key === dateKey(addDays(exam, -1)); if (!unavailable.includes(key) && !state.breaks.includes(DAY_NAMES[date.getDay()]) && !preExam && !state.fullLengths[key]) days.push(date); } return days; }
 function firstFullLengthDate() { const dates = Object.entries(state.fullLengths).filter(([, label]) => label !== "MCAT EXAM").map(([key]) => key).sort(); return dates.length ? parseDate(dates[0]) : null; }
 // Effort per content unit, in "study days" (a textbook chapter ≈ a day of content work).
-const UNIT_EFFORT = { Chapter: 0.8, Lesson: 0.4, Video: 0.1, Page: 0.05 };
+const UNIT_EFFORT = { Chapter: 0.8, Lecture: 1.2, Lesson: 0.4, Video: 0.1, Page: 0.05 };
 const EFFORT_HOURS = 3.75; // 1 effort ≈ 3.75 study hours (a Kaplan chapter ≈ 3 hrs)
 const UNIT_MINUTES = { Video: 6, Page: 10 };
 const unitEffort = resource => resource.effort ?? UNIT_EFFORT[resource.unitLabel] ?? 0.8;
@@ -676,6 +676,34 @@ const CONTENT_SECTIONS = [
 // Kaplan counts are editable defaults: editions differ.
 // [name, unit, default count, effort per unit]. Khan video counts are the MCAT playlists' totals (editable);
 // a Khan video is ~6 min, so it counts as a small fraction of a textbook chapter.
+// ---- Book catalog: pick a book and the planner knows its chapters. ----
+// Kaplan: MCAT Review series (2025–2026/2026–2027 editions). Princeton Review: MCAT Review series
+// (Biology 4th, Biochemistry 3rd, Gen Chem/Orgo/Physics/Psych 5th editions), content chapters only
+// (the "MCAT Basics" and "Strategy" intro chapters are skipped). Counts stay editable for other editions.
+const BOOKS = {
+  "kaplan-bio": { pub: "Kaplan", section: "bb", title: "Kaplan Biology Review", effort: 1, chapters: ["The Cell", "Reproduction", "Embryogenesis and Development", "The Nervous System", "The Endocrine System", "The Respiratory System", "The Cardiovascular System", "The Immune System", "The Digestive System", "Homeostasis", "The Musculoskeletal System", "Genetics and Evolution"] },
+  "kaplan-biochem": { pub: "Kaplan", section: "bb", title: "Kaplan Biochemistry Review", effort: 1, chapters: ["Amino Acids, Peptides, and Proteins", "Enzymes", "Nonenzymatic Protein Function and Protein Analysis", "Carbohydrate Structure and Function", "Lipid Structure and Function", "DNA and Biotechnology", "RNA and the Genetic Code", "Biological Membranes", "Carbohydrate Metabolism I: Glycolysis and Gluconeogenesis", "Carbohydrate Metabolism II: Aerobic Respiration", "Lipid and Amino Acid Metabolism", "Bioenergetics and Regulation of Metabolism"] },
+  "kaplan-genchem": { pub: "Kaplan", section: "cp", title: "Kaplan General Chemistry Review", effort: 1, chapters: ["Atomic Structure", "The Periodic Table", "Bonding and Chemical Interactions", "Compounds and Stoichiometry", "Chemical Kinetics", "Equilibrium", "Thermochemistry", "The Gas Phase", "Solutions", "Acids and Bases", "Oxidation–Reduction Reactions", "Electrochemistry"] },
+  "kaplan-orgo": { pub: "Kaplan", section: "cp", title: "Kaplan Organic Chemistry Review", effort: 1, chapters: ["Nomenclature", "Isomers", "Bonding", "Analyzing Organic Reactions", "Alcohols", "Aldehydes and Ketones I", "Aldehydes and Ketones II", "Carboxylic Acids", "Carboxylic Acid Derivatives", "Nitrogen- and Phosphorus-Containing Compounds", "Spectroscopy", "Separations and Purifications"] },
+  "kaplan-physics": { pub: "Kaplan", section: "cp", title: "Kaplan Physics & Math Review", effort: 1, chapters: ["Kinematics and Dynamics", "Work and Energy", "Thermodynamics", "Fluids", "Electrostatics and Magnetism", "Circuits", "Waves and Sound", "Light and Optics", "Atomic and Nuclear Phenomena", "Mathematics", "Reasoning About the Design and Execution of Research", "Data-Based and Statistical Reasoning"] },
+  "kaplan-behavioral": { pub: "Kaplan", section: "ps", title: "Kaplan Behavioral Sciences Review", effort: 1, chapters: ["Biology and Behavior", "Sensation and Perception", "Learning and Memory", "Cognition, Consciousness, and Language", "Motivation, Emotion, and Stress", "Identity and Personality", "Psychological Disorders", "Social Processes, Attitudes, and Behavior", "Social Interaction", "Social Thinking", "Social Structure and Demographics", "Social Stratification"] },
+  "tpr-bio": { pub: "Princeton Review", section: "bb", title: "Princeton Review Biology Review", effort: 1.05, chapters: ["Biologically Important Molecules", "Molecular Biology", "Microbiology", "Eukaryotic Cells", "Genetics and Evolution", "The Nervous and Endocrine Systems", "The Circulatory, Lymphatic, and Immune Systems", "The Excretory and Digestive Systems", "The Muscular and Skeletal Systems", "The Respiratory System and the Skin", "The Reproductive Systems"] },
+  "tpr-biochem": { pub: "Princeton Review", section: "bb", title: "Princeton Review Biochemistry Review", effort: 0.75, chapters: ["Thermodynamics and Kinetics", "Acid/Base Chemistry", "Amino Acids and Proteins", "Carbohydrates", "Carbohydrate Metabolism", "Lipids", "Nucleic Acids"] },
+  "tpr-genchem": { pub: "Princeton Review", section: "cp", title: "Princeton Review General Chemistry Review", effort: 0.65, chapters: ["Chemistry Fundamentals", "Atomic Structure and Periodic Trends", "Bonding and Intermolecular Forces", "Thermodynamics", "Phases", "Gases", "Kinetics", "Equilibrium", "Acids and Bases", "Electrochemistry", "MCAT Math for General Chemistry"] },
+  "tpr-orgo": { pub: "Princeton Review", section: "cp", title: "Princeton Review Organic Chemistry Review", effort: 0.85, chapters: ["Organic Chemistry Fundamentals and Nomenclature", "Structure and Stability", "Substitution and Elimination Reactions", "Electrophilic Addition Reactions", "Nucleophilic Addition Reactions", "Lab Techniques: Separations and Spectroscopy", "Biologically Important Molecules"] },
+  "tpr-physics": { pub: "Princeton Review", section: "cp", title: "Princeton Review Physics and Math Review", effort: 1.3, chapters: ["Kinematics", "Mechanics", "Fluids and Elasticity of Solids", "Electrostatics", "Electricity and Magnetism", "Oscillations and Waves", "Sound", "Light and Geometrical Optics", "MCAT Math"] },
+  "tpr-psych": { pub: "Princeton Review", section: "ps", title: "Princeton Review Psychology and Sociology Review", effort: 1.4, chapters: ["Research Methods and Study Design", "Behavioral Neuroscience", "Sensation, Perception, and Cognition", "Psychological Disorders and Stress", "Sociological Theories and Social Institutions", "Social Psychology"] },
+  "blueprint-bio": { pub: "Blueprint", section: "bb", title: "Blueprint Biology" }, "blueprint-biochem": { pub: "Blueprint", section: "bb", title: "Blueprint Biochemistry" },
+  "blueprint-genchem": { pub: "Blueprint", section: "cp", title: "Blueprint General Chemistry" }, "blueprint-orgo": { pub: "Blueprint", section: "cp", title: "Blueprint Organic Chemistry" }, "blueprint-physics": { pub: "Blueprint", section: "cp", title: "Blueprint Physics" },
+  "blueprint-psych": { pub: "Blueprint", section: "ps", title: "Blueprint Psychology and Sociology" },
+  "ek-bio": { pub: "Examkrackers", section: "bb", title: "Examkrackers Biology", unit: "Lecture" }, "ek-chem": { pub: "Examkrackers", section: "cp", title: "Examkrackers Chemistry", unit: "Lecture" },
+  "ek-orgo": { pub: "Examkrackers", section: "cp", title: "Examkrackers Organic Chemistry", unit: "Lecture" }, "ek-physics": { pub: "Examkrackers", section: "cp", title: "Examkrackers Physics", unit: "Lecture" },
+  "ek-psych": { pub: "Examkrackers", section: "ps", title: "Examkrackers Psychology & Sociology", unit: "Lecture" }
+};
+const BOOK_SETS = [["Kaplan", "6 science books"], ["Princeton Review", "6 science books"], ["Khan Academy", "all 3 video courses"]];
+const bookChapters = resource => BOOKS[resource.book]?.chapters || null;
+// Older saved resources: attach the catalog book by title so they get chapter names.
+(state.content?.resources || []).forEach(resource => { if (resource.book) return; const hit = Object.entries(BOOKS).find(([, b]) => b.chapters && b.title.toLowerCase() === String(resource.title || "").toLowerCase()); if (hit) resource.book = hit[0]; });
 const CONTENT_OPTIONS = {
   bb: [["Kaplan Biology Review", "Chapter", 12], ["Kaplan Biochemistry Review", "Chapter", 12], ["Khan Academy Bio/Biochem videos", "Video", 368, 0.065, "khan"], ["Blueprint", "Chapter"], ["Princeton Review", "Chapter"]],
   cp: [["Kaplan General Chemistry Review", "Chapter", 12], ["Kaplan Organic Chemistry Review", "Chapter", 12], ["Kaplan Physics & Math Review", "Chapter", 12], ["Khan Academy Chem/Phys videos", "Video", 456, 0.065, "khan"], ["Blueprint", "Chapter"], ["Princeton Review", "Chapter"]],
@@ -713,11 +741,13 @@ function segmentOf(resource, unit) {
   return null;
 }
 function resourceCount(resource) { return Number(resource.count) || 0; }
-function unitName(resource, i) { return resource.unitLabel === "Chapter" ? `Ch. ${i + 1}` : `${resource.unitLabel} ${i + 1}`; }
+function unitName(resource, i) { const t = bookChapters(resource)?.[i]; return (resource.unitLabel === "Chapter" ? `Ch. ${i + 1}` : `${resource.unitLabel} ${i + 1}`) + (t ? `: ${t}` : ""); }
 function unitRange(resource, units) {
   const seg = segmentOf(resource, units[0]);
   const first = (seg ? seg.local : units[0]) + 1, last = first + units.length - 1;
-  const label = resource.unitLabel === "Chapter" ? (first === last ? `Ch. ${first}` : `Ch. ${first}–${last}`) : first === last ? `${resource.unitLabel} ${first}` : `${resource.unitLabel}s ${first}–${last}`;
+  let label = resource.unitLabel === "Chapter" ? (first === last ? `Ch. ${first}` : `Ch. ${first}–${last}`) : first === last ? `${resource.unitLabel} ${first}` : `${resource.unitLabel}s ${first}–${last}`;
+  const names = bookChapters(resource);
+  if (names && !seg) { const titles = units.map(u => names[u]).filter(Boolean); if (titles.length) label += `: ${titles.length <= 2 ? titles.join("; ") : `${titles[0]} + ${titles.length - 1} more`}`; }
   return seg ? `${seg.segment.unit && seg.segment.unit !== seg.segment.name ? `${seg.segment.unit} › ` : ""}${seg.segment.name} · ${label} of ${seg.segment.count}` : label;
 }
 function contentTaskExtra(resource, units) {
@@ -732,29 +762,45 @@ function setContentDone(id, unit, done) {
   state.contentDone[id] = [...set].sort((a, b) => a - b);
 }
 function sectionShort(key) { return CONTENT_SECTIONS.find(section => section.key === key)?.short || key; }
-function newResource(section, title, unitLabel, count, effort, kit) { return { id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, section, source: "", title, unitLabel, count, ...(effort ? { effort } : {}), ...(kit ? { kit } : {}) }; }
+function newResource(section, title, unitLabel, count, effort, kit, book) { return { id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, section, source: "", title, unitLabel, count, ...(effort ? { effort } : {}), ...(kit ? { kit } : {}), ...(book ? { book } : {}) }; }
+function bookResource(id) { const b = BOOKS[id]; return newResource(b.section, b.title, b.unit || "Chapter", b.chapters ? b.chapters.length : 0, b.effort, undefined, id); }
+function khanResource(section) { const o = CONTENT_OPTIONS[section].find(([, , , , kit]) => kit); return newResource(section, optionName(o[0]), o[1], o[2], o[3], o[4]); }
 function resourceTitle(resource) { return [resource.source, resource.title].filter(Boolean).join(" "); }
 
 let contentAddSection = null;
+// Everything a student can pick for a section: catalog books (grouped by publisher), Khan, other presets.
+function pickOptions(section) {
+  const opts = [];
+  Object.entries(BOOKS).filter(([, b]) => b.section === section).forEach(([id, b]) => opts.push({ value: `book:${id}`, group: b.pub, label: b.chapters ? `${b.title.replace(b.pub + " ", "")} · ${b.chapters.length} chapters` : `${b.title.replace(b.pub + " ", "")} · enter your ${(b.unit || "chapter").toLowerCase()} count`, count: b.chapters?.length ?? "", unit: b.unit || "Chapter", book: id }));
+  CONTENT_OPTIONS[section].forEach(([name, unit, count, effort, kit], i) => { if (BOOKS[Object.keys(BOOKS).find(id => BOOKS[id].title === optionName(name))]) return; if (/^(Blueprint|Princeton Review)$/.test(name)) return; opts.push({ value: `opt:${i}`, group: /khan/i.test(name) ? "Khan Academy" : "Other", label: `${optionName(name)}${count ? ` · ${count} ${unit.toLowerCase()}s` : ""}`, count: count ?? "", unit, effort, kit, name: optionName(name) }); });
+  return opts;
+}
+function addSet(pub) {
+  const have = new Set(state.content.resources.map(r => r.book || r.kit + r.section));
+  const add = pub === "Khan Academy" ? ["bb", "cp", "ps"].filter(sec => !have.has(CONTENT_OPTIONS[sec].find(o => o[4])[4] + sec)).map(khanResource)
+    : Object.entries(BOOKS).filter(([id, b]) => b.pub === pub && b.chapters && !have.has(id)).map(([id]) => bookResource(id));
+  state.content.resources.push(...add);
+  return add.length;
+}
 function contentSetupMarkup() {
   const plan = state.content;
   const sections = CONTENT_SECTIONS.map(section => {
     const rows = plan.resources.filter(r => r.section === section.key).map(resource => {
       const done = contentDoneSet(resource.id).size;
       return `<div class="content-row">
-        <span class="content-name">${esc(resourceTitle(resource))}</span>
+        <span class="content-name">${esc(resourceTitle(resource))}${bookChapters(resource) ? '<span class="ch-tag" title="Chapter names are built in">chapters named</span>' : ""}</span>
         <label class="content-count"><input type="number" min="1" max="2000" value="${resourceCount(resource)}" data-resource-count="${resource.id}" aria-label="How many ${esc(resource.unitLabel.toLowerCase())}s">${esc(resource.unitLabel.toLowerCase())}s</label>
         <span class="content-done">${done ? `${done} done` : ""}</span>
         <button type="button" class="task-delete" data-remove-resource="${resource.id}" aria-label="Remove ${esc(resourceTitle(resource))}">&times;</button>
       </div>`;
     }).join("");
-    const options = CONTENT_OPTIONS[section.key];
+    const options = pickOptions(section.key);
     const adding = contentAddSection === section.key;
     const addForm = adding ? `<div class="content-add" data-add-form="${section.key}">
-        <select data-pick aria-label="Resource">${options.map(([name], i) => `<option value="${i}">${esc(name)}</option>`).join("")}<option value="other">Something else…</option></select>
+        <select data-pick aria-label="Resource">${[...new Set(options.map(o => o.group))].map(g => `<optgroup label="${esc(g)}">${options.filter(o => o.group === g).map(o => `<option value="${o.value}">${esc(o.label)}</option>`).join("")}</optgroup>`).join("")}<option value="other">Something else…</option></select>
         <input data-other class="hidden" placeholder="Name it (e.g. my notes)" aria-label="Resource name">
-        <input data-count type="number" min="1" max="2000" value="${options[0][2] ?? ""}" placeholder="How many?" aria-label="How many">
-        <select data-unit aria-label="Unit type"><option value="Chapter">chapters</option><option value="Video">videos</option><option value="Lesson">lessons</option><option value="Page">pages</option></select>
+        <input data-count type="number" min="1" max="2000" value="${options[0]?.count ?? ""}" placeholder="How many?" aria-label="How many">
+        <select data-unit aria-label="Unit type"><option value="Chapter">chapters</option><option value="Video">videos</option><option value="Lesson">lessons</option><option value="Page">pages</option><option value="Lecture">lectures</option></select>
         <button type="button" class="btn primary small" data-save-resource="${section.key}">Add</button>
         <button type="button" class="btn ghost small" data-cancel-resource>Cancel</button>
       </div>` : `<button type="button" class="btn link add-link" data-open-add="${section.key}">+ Add ${rows ? "another" : "a resource"}</button>`;
@@ -764,12 +810,14 @@ function contentSetupMarkup() {
     </div>`;
   }).join("");
   const kaplanButton = plan.resources.length ? "" : `<button type="button" class="btn kaplan-btn" data-content-kaplan><span>Use the recommended setup</span><span class="muted">Kaplan books for B/B and C/P · Khan Academy videos for P/S</span></button>`;
+  const setButtons = `<div class="set-picks"><span class="set-picks-label">Using a full set? Add it in one tap:</span>${BOOK_SETS.map(([pub, note]) => `<button type="button" class="set-pick" data-add-set="${esc(pub)}"><b>${esc(pub)}</b><span>${esc(note)}</span></button>`).join("")}</div>`;
   return `<section class="card setup-card content-setup" id="content-setup" style="--accent:var(--content-bb)">
     <h2 class="section-title">Content review</h2>
     <p class="muted setup-lead">Add what you're studying from — mix resources however you like. Your calendar starts with content review and gradually shifts into practice, spread across all the time you have.</p>
     ${kaplanButton}
+    ${setButtons}
     <div class="content-sections">${sections}</div>
-    <p class="setup-note">Counts are pre-filled (Kaplan books at 12 chapters, Khan Academy at the full playlist) — change any number to match yours. Leave a section empty if you don't need content review for it.</p>
+    <p class="setup-note">Kaplan and Princeton Review books come with their chapters built in, so your calendar names each chapter. Khan Academy is set to the full playlists. If your edition has a different number of chapters, just change the number. For Blueprint and Examkrackers, type how many chapters or lectures your books have. Leave a section empty if you don't need content review for it.</p>
   </section>
   ${timelineMarkup()}
   <div class="setup-footer"><span class="muted">All set? Your calendar is built from everything above.</span>${hasPlan() ? '<button class="btn primary" data-action="update">↻ Update Calendar</button>' : '<button class="btn primary" data-action="generate">⚡ Generate Calendar</button>'}</div>`;
@@ -779,9 +827,11 @@ document.addEventListener("click", event => {
   const scroll = event.target.closest("[data-scroll]");
   if (scroll) { document.getElementById(scroll.dataset.scroll)?.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
   if (event.target.closest("[data-content-kaplan]")) {
-    Object.entries(RECOMMENDED_SET).forEach(([section, picks]) => picks.forEach(i => { const [name, unit, count, effort, kit] = CONTENT_OPTIONS[section][i]; state.content.resources.push(newResource(section, optionName(name), unit, count, effort, kit)); }));
+    state.content.resources.push(...["kaplan-bio", "kaplan-biochem", "kaplan-genchem", "kaplan-orgo", "kaplan-physics"].map(bookResource), khanResource("ps"));
     refreshSetup("Recommended setup added."); return;
   }
+  const set = event.target.closest("[data-add-set]");
+  if (set) { const n = addSet(set.dataset.addSet); refreshSetup(n ? `Added ${n} ${set.dataset.addSet} ${n === 1 ? "resource" : "resources"} with their chapters.` : `${set.dataset.addSet} is already added.`); return; }
   const open = event.target.closest("[data-open-add]");
   if (open) { contentAddSection = open.dataset.openAdd; refreshSetup(); document.querySelector("[data-add-form] [data-pick]")?.focus(); return; }
   if (event.target.closest("[data-cancel-resource]")) { contentAddSection = null; refreshSetup(); return; }
@@ -789,13 +839,14 @@ document.addEventListener("click", event => {
   if (save) {
     const form = save.closest("[data-add-form]"); const section = save.dataset.saveResource;
     const pick = form.querySelector("[data-pick]").value;
-    const option = pick === "other" ? null : CONTENT_OPTIONS[section][Number(pick)];
-    const name = option ? optionName(option[0]) : form.querySelector("[data-other]").value.trim();
+    const option = pick === "other" ? null : pickOptions(section).find(o => o.value === pick);
+    const name = option ? (option.book ? BOOKS[option.book].title : option.name) : form.querySelector("[data-other]").value.trim();
     const count = Math.min(2000, Number(form.querySelector("[data-count]").value) || 0);
     if (!name) return showToast("Give it a name.");
     if (count < 1) return showToast("Enter how many there are.");
     const unit = form.querySelector("[data-unit]").value;
-    state.content.resources.push(newResource(section, name, unit, count, option && option[1] === unit ? option[3] : undefined, option && option[1] === unit ? option[4] : undefined));
+    const same = option && option.unit === unit;
+    state.content.resources.push(newResource(section, name, unit, count, same ? (option.book ? BOOKS[option.book].effort : option.effort) : undefined, same ? option.kit : undefined, same ? option.book : undefined));
     contentAddSection = null; refreshSetup(`Added ${name}.`); return;
   }
   const remove = event.target.closest("[data-remove-resource]");
@@ -804,10 +855,10 @@ document.addEventListener("click", event => {
 document.addEventListener("change", event => {
   const pick = event.target.closest("[data-pick]");
   if (pick) {
-    const form = pick.closest("[data-add-form]"); const option = CONTENT_OPTIONS[form.dataset.addForm][Number(pick.value)];
+    const form = pick.closest("[data-add-form]"); const option = pickOptions(form.dataset.addForm).find(o => o.value === pick.value);
     form.querySelector("[data-other]").classList.toggle("hidden", pick.value !== "other");
-    form.querySelector("[data-count]").value = option?.[2] ?? "";
-    form.querySelector("[data-unit]").value = option?.[1] || "Chapter";
+    form.querySelector("[data-count]").value = option?.count ?? "";
+    form.querySelector("[data-unit]").value = option?.unit || "Chapter";
     (pick.value === "other" ? form.querySelector("[data-other]") : form.querySelector("[data-count]")).focus();
     return;
   }
