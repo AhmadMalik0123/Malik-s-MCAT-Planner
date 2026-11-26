@@ -211,14 +211,55 @@ function defaultTargets() {
 }
 defaultTargets();
 
-function render() {
+function render(forceEnter = false) {
   normalizeFullLengthLabels();
   prunePostExamTasks();
   // Only build the view that's on screen. Hidden views are emptied so stale inputs (e.g. old setup values) can never be read back.
   document.querySelectorAll(".view").forEach(view => { const active = view.id === currentView; view.classList.toggle("hidden", !active); if (!active) view.innerHTML = ""; });
   document.querySelectorAll("nav button").forEach(button => button.classList.toggle("active", button.dataset.view === currentView));
+  const entering = forceEnter || currentView !== lastRenderedView;
+  lastRenderedView = currentView;
+  if (entering && currentView === "today") lastRingPct = 0;
   VIEW_RENDERERS[currentView]?.();
+  moveNavIndicator();
+  if (entering) playEntrance(document.getElementById(currentView));
 }
+let lastRenderedView = null;
+let enterTimer = null;
+let lastRingPct = 0;
+let justToggled = null;
+// Tag elements for a staggered entrance, count numbers up, then drop the class so later partial re-renders stay still.
+function playEntrance(view) {
+  if (!view) return;
+  let i = 0, d = 0;
+  view.querySelectorAll(".stat, .card, .steps li, .task-row, .review-item, .review-filters, .day").forEach(el => {
+    el.classList.add("anim");
+    el.style.setProperty("--i", el.classList.contains("day") ? d++ : i++);
+  });
+  view.classList.remove("enter"); void view.offsetWidth; view.classList.add("enter");
+  clearTimeout(enterTimer);
+  enterTimer = setTimeout(() => view.classList.remove("enter"), 1500);
+  view.querySelectorAll(".stat strong, .hero-value, .score-stats strong").forEach(countUp);
+}
+function countUp(el) {
+  const node = el.firstChild;
+  if (!node || node.nodeType !== 3 || !/^\d[\d,]*$/.test(node.textContent.trim())) return;
+  const target = Number(node.textContent.replace(/,/g, ""));
+  if (!target || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const start = performance.now(), duration = 900;
+  const step = now => { const t = Math.min(1, (now - start) / duration); node.textContent = Math.round(target * (1 - Math.pow(1 - t, 3))).toLocaleString(); if (t < 1) requestAnimationFrame(step); };
+  node.textContent = "0";
+  requestAnimationFrame(step);
+}
+function moveNavIndicator() {
+  const indicator = document.querySelector(".nav-indicator");
+  const active = document.querySelector("nav button.active");
+  if (!indicator || !active) return;
+  indicator.style.width = `${active.offsetWidth}px`;
+  indicator.style.transform = `translateX(${active.offsetLeft}px)`;
+}
+window.addEventListener("resize", moveNavIndicator);
+document.fonts?.ready.then(moveNavIndicator);
 const VIEW_RENDERERS = {
   today: renderToday,
   setup: () => { renderSetup(); enhanceUnavailablePicker(); },
@@ -254,14 +295,20 @@ function renderToday() {
     </section>
     <div class="dashboard">
       <section class="card"><div class="card-head"><h2>Today's checklist</h2>${tasks.length ? `<span class="pill">${doneCount}/${tasks.length}</span>` : ""}</div><div class="stack today-list">${checklist}</div></section>
-      <aside class="right-panel stack"><section class="card countdown"><div class="ring ${donePct === 100 ? "complete" : ""}" style="--pct:${donePct}"><div class="ring-value"><strong>${donePct}%</strong><small>${ringLabel}</small></div></div></section><section class="card"><h2>Question progress</h2>${progressMarkup("UWorld", TOTALS.uworld)}${progressMarkup("AAMC", TOTALS.aamc)}</section></aside>
+      <aside class="right-panel stack"><section class="card countdown"><div class="ring ${donePct === 100 ? "complete" : ""}" style="--pct:${donePct};--from:${lastRingPct}"><div class="ring-value"><strong>${donePct}%</strong><small>${ringLabel}</small></div>${donePct === 100 && lastRingPct < 100 && tasks.length ? burstMarkup() : ""}</div></section><section class="card"><h2>Question progress</h2>${progressMarkup("UWorld", TOTALS.uworld)}${progressMarkup("AAMC", TOTALS.aamc)}</section></aside>
     </div>`;
+  lastRingPct = donePct;
+  justToggled = null;
+}
+function burstMarkup() {
+  const colors = ["var(--cyan)", "var(--violet)", "var(--uw-bb)", "var(--anki)", "var(--aamc-independent)", "var(--uw-cp)"];
+  return `<div class="burst" aria-hidden="true">${Array.from({ length: 22 }, (_, i) => { const angle = i / 22 * Math.PI * 2; const dist = 95 + (i % 4) * 18; return `<i style="--c:${colors[i % colors.length]};--x:${Math.round(Math.cos(angle) * dist)}px;--y:${Math.round(Math.sin(angle) * dist)}px;animation-delay:${(i % 5) * 25 + 350}ms"></i>`; }).join("")}</div>`;
 }
 function taskMarkup(task, checkbox) {
   const resource = task.section === "Jack Westin" ? '<button type="button" class="task-resource" data-link="https://jackwestin.com/#daily-passages">Open daily passage ↗</button>' : "";
   const identifier = task.custom ? `data-custom-task-date="${task.date}" data-custom-task-id="${task.id}"` : `data-task-date="${task.date}" data-task-index="${task.index}"`;
   const deleteButton = task.custom ? `<button type="button" class="task-delete" data-delete-task-date="${task.date}" data-delete-task-id="${task.id}" aria-label="Remove task">&times;</button>` : "";
-  return `<div class="task-row"><label class="task ${task.done ? "done" : ""}" style="--c:${colorFor(task)}"><input type="checkbox" ${task.done ? "checked" : ""} ${identifier}><span class="task-body"><span class="task-section">${esc(task.section)}</span><strong>${esc(task.detail || (task.custom ? "Personal study block" : task.label))}</strong>${resource}</span></label>${deleteButton}</div>`;
+  return `<div class="task-row"><label class="task ${task.done ? "done" : ""} ${task.done && justToggled === (task.custom ? `c:${task.id}` : `t:${task.date}:${task.index}`) ? "just-done" : ""}" style="--c:${colorFor(task)}"><input type="checkbox" ${task.done ? "checked" : ""} ${identifier}><span class="task-body"><span class="task-section">${esc(task.section)}</span><strong>${esc(task.detail || (task.custom ? "Personal study block" : task.label))}</strong>${resource}</span></label>${deleteButton}</div>`;
 }
 function progressMarkup(title, group) { return `<div class="section-title" style="margin-top:16px"><strong>${title}</strong></div>${Object.entries(group).map(([section, total]) => { const done = completedFor(section); const pct = total ? Math.min(100, Math.round(done / total * 100)) : 0; return `<div class="progress-row"><div class="progress-head"><span style="color:${COLORS[section]}">${esc(section.replace("UWorld ", "").replace("AAMC ", ""))}</span><span>${done} / ${total}</span></div><div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${COLORS[section]}"></div></div></div>`; }).join("")}`; }
 
@@ -290,7 +337,7 @@ function readSetup() {
   const sections = [...document.querySelectorAll(".target-row strong")].map(el => el.textContent);
   selects.forEach((select, index) => { state.targets[sections[index]] = Math.round(TOTALS.uworld[sections[index]] || TOTALS.aamc[sections[index]] || 0) * Number(select.value) / 100; });
 }
-function generatePlan() { readSetup(); const exam = parseDate(state.examDate); if (!exam || exam <= new Date()) return showToast("Choose a future exam date."); state.fullLengths = {}; const dayNumber = DAY_NAMES.indexOf(state.fullLengthDay); for (let i = 0; i < 7; i++) { let date = addDays(exam, -(49 - i * 7)); while (date.getDay() !== dayNumber) date = addDays(date, -1); if (date > new Date()) state.fullLengths[dateKey(date)] = ["Unscored", "FL 1", "FL 2", "FL 3", "FL 4", "FL 5", "FL 6"][i]; } state.fullLengths[state.examDate] = "MCAT EXAM"; state.tasks = buildTasks(exam); saveState(); displayedMonth = firstOfMonth(new Date()); currentView = "today"; render(); showToast("Calendar generated."); }
+function generatePlan() { readSetup(); const exam = parseDate(state.examDate); if (!exam || exam <= new Date()) return showToast("Choose a future exam date."); state.fullLengths = {}; const dayNumber = DAY_NAMES.indexOf(state.fullLengthDay); for (let i = 0; i < 7; i++) { let date = addDays(exam, -(49 - i * 7)); while (date.getDay() !== dayNumber) date = addDays(date, -1); if (date > new Date()) state.fullLengths[dateKey(date)] = ["Unscored", "FL 1", "FL 2", "FL 3", "FL 4", "FL 5", "FL 6"][i]; } state.fullLengths[state.examDate] = "MCAT EXAM"; state.tasks = buildTasks(exam); saveState(); displayedMonth = firstOfMonth(new Date()); currentView = "today"; render(true); showToast("Calendar generated."); }
 function availableDays(exam) { const days = []; const start = new Date(); start.setHours(12, 0, 0, 0); const unavailable = state.unavailable.split(",").map(value => value.trim()).filter(Boolean); for (let date = start; date < exam; date = addDays(date, 1)) { const key = dateKey(date); const preExam = key === dateKey(addDays(exam, -1)); if (!unavailable.includes(key) && !state.breaks.includes(DAY_NAMES[date.getDay()]) && !preExam && !state.fullLengths[key]) days.push(date); } return days; }
 function firstFullLengthDate() { const dates = Object.entries(state.fullLengths).filter(([, label]) => label !== "MCAT EXAM").map(([key]) => key).sort(); return dates.length ? parseDate(dates[0]) : null; }
 function buildTasks(exam) {
@@ -478,9 +525,9 @@ function progressCard(title, group, accent) { const groupTotal = Object.values(g
 function recordCompletedTasks() { Object.values(state.tasks).flat().forEach(task => { if (!task.done || task.counted || !/^\d+ questions$/.test(task.detail)) return; const amount = Number(task.detail.match(/\d+/)[0]); const total = TOTALS.uworld[task.section] || TOTALS.aamc[task.section] || 0; state.completed[task.section] = Math.min(total, completedFor(task.section) + amount); task.counted = true; }); }
 function updateCalendar() { if (!state.examDate || !Object.keys(state.tasks).length) return showToast("Generate a calendar first."); recordCompletedTasks(); saveState(); generatePlan(); showToast("Calendar updated from completed work."); }
 
-document.addEventListener("click", event => { const view = event.target.closest("[data-view]"); if (view) { currentView = view.dataset.view; render(); window.scrollTo({ top: 0, behavior: "smooth" }); return; } const link = event.target.closest("[data-link]"); if (link) window.open(link.dataset.link, "_blank", "noopener"); const action = event.target.closest("[data-action]"); if (action?.dataset.action === "generate") generatePlan(); if (action?.dataset.action === "update") updateCalendar(); if (action?.dataset.action === "export") exportPlan(); if (action?.dataset.action === "export-calendar") exportCombinedReport(); const filter = event.target.closest("[data-review-filter]"); if (filter) { reviewFilter = filter.dataset.reviewFilter; renderReview(); } const month = event.target.closest("[data-month]"); if (month) { displayedMonth = month.dataset.month === "today" ? firstOfMonth(new Date()) : new Date(displayedMonth.getFullYear(), displayedMonth.getMonth() + Number(month.dataset.month), 1, 12); renderCalendar(); } const addCustom = event.target.closest("[data-add-custom-task]"); if (addCustom) addCustomTask(); const deleteTask = event.target.closest("[data-delete-task-date]"); if (deleteTask) deleteCustomTask(deleteTask.dataset.deleteTaskDate, deleteTask.dataset.deleteTaskId); });
-document.addEventListener("change", event => { if (event.target.matches("[data-task-date]")) { const task = state.tasks[event.target.dataset.taskDate]?.[Number(event.target.dataset.taskIndex)]; if (task) { task.done = event.target.checked; saveState(); if (currentView === "today") renderToday(); showToast(event.target.checked ? "Task marked complete ✓" : "Task reopened."); } } });
-document.addEventListener("change", event => { if (event.target.matches("[data-custom-task-date]")) { const task = state.customTasks[event.target.dataset.customTaskDate]?.find(item => String(item.id) === event.target.dataset.customTaskId); if (task) { task.done = event.target.checked; saveState(); if (currentView === "today") renderToday(); showToast(event.target.checked ? "Task marked complete ✓" : "Task reopened."); } } });
+document.addEventListener("click", event => { const view = event.target.closest("[data-view]"); if (view) { currentView = view.dataset.view; render(); window.scrollTo({ top: 0, behavior: "smooth" }); return; } const link = event.target.closest("[data-link]"); if (link) window.open(link.dataset.link, "_blank", "noopener"); const action = event.target.closest("[data-action]"); if (action?.dataset.action === "generate") generatePlan(); if (action?.dataset.action === "update") updateCalendar(); if (action?.dataset.action === "export") exportPlan(); if (action?.dataset.action === "export-calendar") exportCombinedReport(); const filter = event.target.closest("[data-review-filter]"); if (filter) { reviewFilter = filter.dataset.reviewFilter; renderReview(); } const month = event.target.closest("[data-month]"); if (month) { const before = displayedMonth; displayedMonth = month.dataset.month === "today" ? firstOfMonth(new Date()) : new Date(displayedMonth.getFullYear(), displayedMonth.getMonth() + Number(month.dataset.month), 1, 12); renderCalendar(); if (displayedMonth.getTime() !== before.getTime()) document.querySelector(".month-grid")?.classList.add(displayedMonth > before ? "slide-next" : "slide-prev"); } const addCustom = event.target.closest("[data-add-custom-task]"); if (addCustom) addCustomTask(); const deleteTask = event.target.closest("[data-delete-task-date]"); if (deleteTask) deleteCustomTask(deleteTask.dataset.deleteTaskDate, deleteTask.dataset.deleteTaskId); });
+document.addEventListener("change", event => { if (event.target.matches("[data-task-date]")) { const task = state.tasks[event.target.dataset.taskDate]?.[Number(event.target.dataset.taskIndex)]; if (task) { task.done = event.target.checked; justToggled = `t:${task.date}:${task.index}`; saveState(); if (currentView === "today") renderToday(); showToast(event.target.checked ? "Task marked complete ✓" : "Task reopened."); } } });
+document.addEventListener("change", event => { if (event.target.matches("[data-custom-task-date]")) { const task = state.customTasks[event.target.dataset.customTaskDate]?.find(item => String(item.id) === event.target.dataset.customTaskId); if (task) { task.done = event.target.checked; justToggled = `c:${task.id}`; saveState(); if (currentView === "today") renderToday(); showToast(event.target.checked ? "Task marked complete ✓" : "Task reopened."); } } });
 document.addEventListener("change", event => { if (event.target.matches("[data-completed]")) { state.completed[event.target.dataset.completed] = Math.max(0, Math.min(Number(event.target.max), Number(event.target.value) || 0)); saveState(); } });
 document.addEventListener("change", event => { if (event.target.matches("[data-score-date]")) { const score = Number(event.target.value); if (event.target.value === "") delete state.fullLengthScores[event.target.dataset.scoreDate]; else state.fullLengthScores[event.target.dataset.scoreDate] = Math.max(0, Math.min(528, score || 0)); saveState(); renderProgress(); enhanceSubsectionScores(); enhanceMainScoreGraph(); showToast("Full-length score saved."); } });
 document.addEventListener("change", event => { if (event.target.matches("[data-section-score-date]")) { const date = event.target.dataset.sectionScoreDate; const key = event.target.dataset.sectionScore; state.fullLengthSectionScores[date] ||= {}; if (event.target.value === "") delete state.fullLengthSectionScores[date][key]; else state.fullLengthSectionScores[date][key] = Math.max(0, Math.min(132, Number(event.target.value) || 0)); saveState(); renderProgress(); enhanceSubsectionScores(); enhanceMainScoreGraph(); showToast("Section score saved."); } });
