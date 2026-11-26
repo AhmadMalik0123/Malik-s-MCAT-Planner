@@ -672,3 +672,4 @@ html[data-mode="light"] .kc-body strong { background: linear-gradient(90deg, #db
 html[data-mode="light"] nav button.active, html[data-mode="light"] .section-score-tab.active, html[data-mode="light"] .review-filter-chip.active, html[data-mode="light"] .review-filter-chip:hover { color: var(--ink); }
 html[data-mode="light"] .task-resource { background: rgba(15, 23, 42, .03); }
 html[data-mode="light"] .splash-dot { fill: rgb(var(--a2)); }
+.brand-text b { font-size: 16px; }
