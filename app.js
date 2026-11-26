@@ -300,10 +300,18 @@ function renderToday() {
     </section>
     <div class="dashboard">
       <section class="card"><div class="card-head"><h2>Today's checklist</h2>${tasks.length ? `<span class="pill">${doneCount}/${tasks.length}</span>` : ""}</div><div class="stack today-list">${checklist}</div></section>
-      <aside class="right-panel stack"><section class="card countdown"><div class="ring ${donePct === 100 ? "complete" : ""}" style="--pct:${donePct};--from:${lastRingPct}"><div class="ring-value"><strong>${donePct}%</strong><small>${ringLabel}</small></div>${donePct === 100 && lastRingPct < 100 && tasks.length ? burstMarkup() : ""}</div></section><section class="card"><h2>Question progress</h2>${progressMarkup("UWorld", TOTALS.uworld)}${progressMarkup("AAMC", TOTALS.aamc)}</section></aside>
+      <aside class="right-panel stack"><section class="card countdown"><div class="ring ${donePct === 100 ? "complete" : ""}" style="--pct:${donePct};--from:${lastRingPct}"><div class="ring-value"><strong>${donePct}%</strong><small>${ringLabel}</small></div>${donePct === 100 && lastRingPct < 100 && tasks.length ? burstMarkup() : ""}</div></section>${krillionCard(donePct, tasks.length)}<section class="card"><h2>Question progress</h2>${progressMarkup("UWorld", TOTALS.uworld)}${progressMarkup("AAMC", TOTALS.aamc)}</section></aside>
     </div>`;
   lastRingPct = donePct;
   justToggled = null;
+}
+function krillionCard(donePct, taskCount) {
+  const line = taskCount && donePct === 100 ? "Checklist done — you earned a round! 🎉" : donePct >= 50 ? "Halfway there. Quick brain break?" : "Warm up with a quick round before you start.";
+  return `<a class="card krillion" href="https://mcatkrillion.netlify.app" target="_blank" rel="noopener">
+    <div class="atom" aria-hidden="true"><span class="nucleus"></span><span class="orbit o1"><i></i></span><span class="orbit o2"><i></i></span><span class="orbit o3"><i></i></span></div>
+    <div class="krillion-text"><span class="krillion-kicker">Study break</span><strong>MCAT Krillion</strong><span>${line}</span><span class="krillion-sub">7 prompts · name as many as you can · chase a <em>One in a 528-ion</em></span></div>
+    <span class="krillion-go">Play ↗</span>
+  </a>`;
 }
 function burstMarkup() {
   const colors = ["var(--cyan)", "var(--violet)", "var(--uw-bb)", "var(--anki)", "var(--aamc-independent)", "var(--uw-cp)"];
@@ -320,7 +328,7 @@ function progressMarkup(title, group) { return `<div class="section-title" style
 function renderSetup() {
   const select = (section, total) => { const savedPercent = total ? Math.round(targetFor(section) / total * 100) : 0; return `<select>${[0, 25, 50, 75, 100].map(value => `<option value="${value}" ${value === savedPercent ? "selected" : ""}>${value}%</option>`).join("")}</select>`; };
   const targetRows = (group, key) => Object.entries(group).map(([section, total]) => `<div class="target-row"><strong style="color:${COLORS[section]}">${section}</strong><small>${total} questions</small>${select(section, total)}</div>`).join("");
-  document.querySelector("#setup").innerHTML = `<div class="page-head"><div><div class="page-kicker">Plan with intention</div><h1>Build your MCAT plan</h1><p class="muted">Pick your exam date, set your targets, choose your content review, then generate.</p></div><div class="head-actions"><span class="save-status">● Saved automatically</span><button class="btn primary" data-action="generate">⚡ Generate Calendar</button></div></div>
+  document.querySelector("#setup").innerHTML = `<div class="page-head"><div><div class="page-kicker">Plan with intention</div><h1>Build your MCAT plan</h1><p class="muted">Pick your exam date, set your targets, add your content review, then generate. We spread it all across your time.</p></div><div class="head-actions"><span class="save-status">● Saved automatically</span><button class="btn primary" data-action="generate">⚡ Generate Calendar</button></div></div>
     <ol class="steps"><li><span>1</span>Exam date &amp; breaks</li><li><span>2</span>UWorld &amp; AAMC targets</li><li class="step-link" data-scroll="content-setup"><span>3</span>Content review</li><li><span>4</span>Generate calendar</li></ol>
     <div class="grid setup-grid"><section class="card setup-card setup-main" style="--accent:var(--teal)"><h2 class="section-title">Exam and schedule</h2><p class="muted setup-lead">Your anchor date controls every full length, break, and workload deadline.</p><div class="form-grid"><label>Exam date<input id="exam-date" type="date" value="${state.examDate}"></label><label>Full-length weekday<select id="fl-day" class="full-length-control">${DAY_NAMES.slice(1).concat(DAY_NAMES[0]).map(day => `<option ${day === state.fullLengthDay ? "selected" : ""}>${day}</option>`).join("")}</select></label></div><div class="exam-date-card"><div><div class="muted">Selected MCAT exam date</div><strong>${state.examDate ? formatDate(parseDate(state.examDate)) : "Choose an exam date"}</strong></div></div><div class="setup-note">The day before the MCAT is automatically protected as a break.</div><h3 style="margin-top:18px">Weekly break days</h3><div class="checks">${DAY_NAMES.map(day => `<label><input type="checkbox" data-break="${day}" ${state.breaks.includes(day) ? "checked" : ""}>${day.slice(0, 3)}</label>`).join("")}</div><label style="margin-top:16px">Unavailable dates, comma-separated<textarea id="unavailable" rows="3" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:5px">${esc(state.unavailable)}</textarea></label></section>
     <section class="card setup-card setup-secondary" style="--accent:var(--uw-cp)"><h2 class="section-title">UWorld targets</h2>${targetRows(TOTALS.uworld, "uworld")}<button class="btn link" data-link="https://www.uworld.com/?srsltid=AU7gw4V3fQJIo5Tajbd8fYy4dEsrb_l3rlcHE4yjxfZssxWl5L95cHku">Open UWorld MCAT ↗</button><p class="setup-note">UWorld CARS defaults to 100%. AAMC CARS is scheduled separately as 3 passages per day.</p></section><section class="card setup-card setup-secondary" style="--accent:var(--aamc-cp)"><h2 class="section-title">AAMC targets</h2>${targetRows(Object.fromEntries(Object.entries(TOTALS.aamc).filter(([section]) => section !== "AAMC CARS")), "aamc")}<button class="btn link" data-link="https://students-residents.aamc.org/prepare-mcat-exam/aamc-mcat-official-prep-updates">Open AAMC Prep Hub ↗</button><p class="setup-note">AAMC CARS includes all 575 questions and is displayed as passages.</p></section></div>${contentSetupMarkup()}`;
@@ -345,128 +353,158 @@ function readSetup() {
 function generatePlan() { readSetup(); const exam = parseDate(state.examDate); if (!exam || exam <= new Date()) return showToast("Choose a future exam date."); state.fullLengths = {}; const dayNumber = DAY_NAMES.indexOf(state.fullLengthDay); for (let i = 0; i < 7; i++) { let date = addDays(exam, -(49 - i * 7)); while (date.getDay() !== dayNumber) date = addDays(date, -1); if (date > new Date()) state.fullLengths[dateKey(date)] = ["Unscored", "FL 1", "FL 2", "FL 3", "FL 4", "FL 5", "FL 6"][i]; } state.fullLengths[state.examDate] = "MCAT EXAM"; state.tasks = buildTasks(exam); saveState(); displayedMonth = firstOfMonth(new Date()); currentView = "today"; render(true); showToast("Calendar generated."); }
 function availableDays(exam) { const days = []; const start = new Date(); start.setHours(12, 0, 0, 0); const unavailable = state.unavailable.split(",").map(value => value.trim()).filter(Boolean); for (let date = start; date < exam; date = addDays(date, 1)) { const key = dateKey(date); const preExam = key === dateKey(addDays(exam, -1)); if (!unavailable.includes(key) && !state.breaks.includes(DAY_NAMES[date.getDay()]) && !preExam && !state.fullLengths[key]) days.push(date); } return days; }
 function firstFullLengthDate() { const dates = Object.entries(state.fullLengths).filter(([, label]) => label !== "MCAT EXAM").map(([key]) => key).sort(); return dates.length ? parseDate(dates[0]) : null; }
+// Effort per content unit, in "study days" (a textbook chapter ≈ a day of content work).
+const UNIT_EFFORT = { Chapter: 0.8, Lesson: 0.5, Video: 0.2 };
+const UWORLD_PER_DAY = 50, AAMC_PER_DAY = 35, IDEAL_UWORLD_DAYS = 45;
+// Weight for each day in [start, end): ramps up over rampIn days and down over rampOut days, so phases hand off gradually.
+function phaseWeights(start, end, rampIn, rampOut) {
+  const weights = new Map();
+  for (let i = start; i < end; i++) {
+    let w = 1;
+    if (rampIn > 0) w = Math.min(w, (i - start + 1) / (rampIn + 1));
+    if (rampOut > 0) w = Math.min(w, (end - i) / (rampOut + 1));
+    weights.set(i, w);
+  }
+  return weights;
+}
+// Split a phase's question totals across its days: a few sections per day (smooth weighted round-robin),
+// each section's exact total spread over its days in proportion to that day's weight.
+function scheduleQuestionPhase(perDay, remainingBySection, weights) {
+  const sections = [...remainingBySection.keys()].filter(section => remainingBySection.get(section) > 0);
+  if (!sections.length || !weights.size) return;
+  const grand = sections.reduce((sum, section) => sum + remainingBySection.get(section), 0);
+  const weightSum = [...weights.values()].reduce((sum, w) => sum + w, 0);
+  const current = new Map(sections.map(section => [section, 0]));
+  const slots = new Map(sections.map(section => [section, []]));
+  for (const [day, w] of weights) {
+    const expected = grand * w / weightSum;
+    const picks = Math.min(sections.length, expected >= 70 ? 3 : expected >= 35 ? 2 : 1);
+    const today = new Set();
+    for (let p = 0; p < picks; p++) {
+      let best = null;
+      sections.forEach(section => { if (today.has(section)) return; current.set(section, current.get(section) + remainingBySection.get(section)); if (!best || current.get(section) > current.get(best)) best = section; });
+      current.set(best, current.get(best) - grand);
+      today.add(best);
+      slots.get(best).push({ day, share: w / picks });
+    }
+  }
+  sections.forEach(section => {
+    const list = slots.get(section); const total = remainingBySection.get(section);
+    if (!list.length) return;
+    const shareSum = list.reduce((sum, slot) => sum + slot.share, 0);
+    const raw = list.map(slot => total * slot.share / shareSum);
+    const amounts = raw.map(Math.floor);
+    let left = total - amounts.reduce((sum, n) => sum + n, 0);
+    raw.map((value, i) => [value - Math.floor(value), i]).sort((x, y) => y[0] - x[0]).forEach(([, i]) => { if (left > 0) { amounts[i]++; left--; } });
+    list.forEach((slot, i) => { if (amounts[i] > 0) (perDay[slot.day] ||= []).push([section, `${amounts[i]} questions`, {}]); });
+  });
+}
 function buildTasks(exam) {
   const tasks = {};
   const days = availableDays(exam);
+  const N = days.length;
+  if (!N) return tasks;
+  const flStart = firstFullLengthDate();
+  const remaining = section => Math.max(0, targetFor(section) - completedFor(section));
+
+  // ---- workload in each phase ----
+  const contentSlots = [];
+  (state.content?.resources || []).forEach(resource => {
+    const done = contentDoneSet(resource.id);
+    const units = [...Array(resourceCount(resource)).keys()].filter(i => !done.has(i));
+    units.forEach((unit, n) => contentSlots.push({ resource, unit, position: (n + 0.5) / units.length }));
+  });
+  contentSlots.sort((a, b) => a.position - b.position || CONTENT_SECTIONS.findIndex(s => s.key === a.resource.section) - CONTENT_SECTIONS.findIndex(s => s.key === b.resource.section));
+  const uworld = new Map(["UWorld B/B", "UWorld C/P", "UWorld P/S", "UWorld CARS"].map(section => [section, remaining(section)]));
+  const aamc = new Map(Object.keys(TOTALS.aamc).filter(section => section !== "AAMC CARS").map(section => [section, remaining(section)]));
+  const sum = map => [...map.values()].reduce((total, n) => total + n, 0);
+  const effort = {
+    content: contentSlots.reduce((total, slot) => total + (UNIT_EFFORT[slot.resource.unitLabel] ?? 1), 0),
+    uworld: sum(uworld) / UWORLD_PER_DAY,
+    aamc: sum(aamc) / AAMC_PER_DAY
+  };
+  const order = ["content", "uworld", "aamc"].filter(phase => effort[phase] > 0);
+  const totalEffort = order.reduce((total, phase) => total + effort[phase], 0);
+
+  // ---- lay phases end to end across ALL available days, sized by workload, overlapping at each handoff ----
+  const ranges = {};
+  if (order.length) {
+    let cursor = 0;
+    const bounds = order.map(phase => { const start = cursor; cursor += N * effort[phase] / totalEffort; return { phase, start, end: cursor }; });
+    const overlap = Math.max(2, Math.min(21, Math.round(N * 0.12)));
+    bounds.forEach((bound, i) => {
+      const prev = bounds[i - 1], next = bounds[i + 1];
+      const inLen = prev ? Math.min(overlap, (bound.end - bound.start) / 2, (prev.end - prev.start) / 2) : 0;
+      const outLen = next ? Math.min(overlap, (bound.end - bound.start) / 2, (next.end - next.start) / 2) : 0;
+      const start = Math.max(0, Math.floor(bound.start - inLen / 2));
+      const end = Math.min(N, Math.ceil(bound.end + outLen / 2));
+      ranges[bound.phase] = { start, end, weights: phaseWeights(start, end, Math.round(inLen), Math.round(outLen)) };
+    });
+  }
+  const perDay = {};
+  // content: walk the cumulative day weights so each unit lands where its share of the phase falls
+  if (ranges.content && contentSlots.length) {
+    const entries = [...ranges.content.weights];
+    const totalW = entries.reduce((total, [, w]) => total + w, 0);
+    let cumulative = 0, k = 0;
+    entries.forEach(([day, w]) => {
+      cumulative += w;
+      while (k < contentSlots.length && (k + 0.5) / contentSlots.length <= cumulative / totalW) {
+        const { resource, unit } = contentSlots[k++];
+        (perDay[day] ||= []).push([`Content ${sectionShort(resource.section)}`, `${resourceTitle(resource)} · ${unitName(resource, unit)}`, { contentId: resource.id, unit }]);
+      }
+    });
+  }
+  if (ranges.uworld) scheduleQuestionPhase(perDay, uworld, ranges.uworld.weights);
+  if (ranges.aamc) scheduleQuestionPhase(perDay, aamc, ranges.aamc.weights);
+  days.forEach((date, i) => (perDay[i] || []).forEach(([section, detail, extra]) => addTask(tasks, date, section, detail, extra)));
+
+  // ---- AAMC CARS: 3 passages a day in the final stretch ----
   const aamcCars = Math.ceil(575 / 9);
-  const carsDays = Math.min(days.length, Math.ceil(aamcCars / 3));
+  const carsDays = Math.min(N, Math.ceil(aamcCars / 3));
   const carsRate = carsDays < Math.ceil(aamcCars / 3) ? Math.ceil(aamcCars / carsDays) : 3;
   let remainingCars = aamcCars;
-
-  const uworldSections = Object.keys(TOTALS.uworld).filter(section => section !== "UWorld CARS");
-  const aamcSections = Object.keys(TOTALS.aamc).filter(section => section !== "AAMC CARS");
-  const uworldRemaining = uworldSections.reduce((sum, section) => sum + Math.max(0, targetFor(section) - completedFor(section)), 0);
-  // full-length exams mark the point where AAMC review should take over from UWorld
-  const flStart = firstFullLengthDate();
-  const preFLDays = flStart ? days.filter(date => date < flStart).length : days.length;
-  const idealUworldDays = 45; // roughly a month and a half of dedicated UWorld time
-  const uworldMinDays = uworldRemaining ? Math.max(1, Math.ceil(uworldRemaining / 75)) : 0;
-  const uworldDays = uworldRemaining ? Math.min(days.length, Math.max(uworldMinDays, Math.min(idealUworldDays, Math.max(preFLDays, uworldMinDays)))) : 0;
-  // delay UWorld's start so it wraps up right as full lengths begin instead of finishing early and leaving a gap
-  const uworldStart = Math.max(0, Math.min(preFLDays, days.length) - uworldDays);
-  const uworldEnd = uworldStart + uworldDays;
-  const aamcStart = Math.min(days.length, Math.max(0, uworldEnd - 7));
-  const aamcEnd = days.length;
-
-  // AAMC keeps the weighted round-robin (biggest remaining pool shows up most often)
-  const scheduleSections = (sections, start, end, lateSections = []) => {
-    const active = sections.filter(section => targetFor(section) > completedFor(section));
-    if (!active.length) return;
-    const scheduleEnd = Math.min(end, days.length);
-    const window = Math.max(0, scheduleEnd - start);
-    if (!window) return;
-    const remainingBySection = new Map(active.map(section => [section, Math.max(0, targetFor(section) - completedFor(section))]));
-    const totalRemaining = [...remainingBySection.values()].reduce((sum, value) => sum + value, 0);
-    // largest remainder method: give every section at least one day, then split the rest by its share of the remaining work
-    const rawShares = active.map(section => remainingBySection.get(section) / totalRemaining * window);
-    const dayCounts = new Map(active.map((section, index) => [section, Math.max(1, Math.floor(rawShares[index]))]));
-    let assignedDays = [...dayCounts.values()].reduce((sum, value) => sum + value, 0);
-    const remainders = active.map((section, index) => ({ section, remainder: rawShares[index] - Math.floor(rawShares[index]) })).sort((a, b) => b.remainder - a.remainder);
-    for (let i = 0; assignedDays < window; i++, assignedDays++) dayCounts.set(remainders[i % remainders.length].section, dayCounts.get(remainders[i % remainders.length].section) + 1);
-    const entryDay = new Map(active.map(section => [section, lateSections.includes(section) ? Math.max(start, scheduleEnd - dayCounts.get(section)) : start]));
-    // smooth weighted round-robin (nginx-style) picks a section for each day proportional to its remaining day count
-    const currentWeight = new Map(active.map(section => [section, 0]));
-    const daysLeftForSection = new Map(dayCounts);
-    for (let i = start; i < scheduleEnd; i++) {
-      let picked = null;
-      active.forEach(section => {
-        if (daysLeftForSection.get(section) <= 0 || i < entryDay.get(section)) return;
-        currentWeight.set(section, currentWeight.get(section) + dayCounts.get(section));
-        if (!picked || currentWeight.get(section) > currentWeight.get(picked)) picked = section;
-      });
-      if (!picked) continue;
-      currentWeight.set(picked, currentWeight.get(picked) - window);
-      const remaining = remainingBySection.get(picked);
-      const amount = Math.max(1, Math.ceil(remaining / daysLeftForSection.get(picked)));
-      addTask(tasks, days[i], picked, `${amount} questions`);
-      remainingBySection.set(picked, remaining - amount);
-      daysLeftForSection.set(picked, daysLeftForSection.get(picked) - 1);
-    }
-  };
-
-  // UWorld cycles through a fixed B/B -> P/S -> C/P pattern every day (skipping any section not yet eligible
-  // or already finished), so P/S is part of the daily rotation instead of a separate track
-  const psSection = "UWorld P/S";
-  const uworldOrder = ["UWorld B/B", "UWorld P/S", "UWorld C/P"].filter(section => uworldSections.includes(section) && targetFor(section) > completedFor(section));
-  if (uworldOrder.length) {
-    const psRemaining = Math.max(0, targetFor(psSection) - completedFor(psSection));
-    // P/S joins once there's enough runway left to cover it at a reasonable pace (~45/sitting) at its 1-in-3 turn frequency
-    const psOccurrencesNeeded = psRemaining ? Math.max(1, Math.ceil(psRemaining / 45)) : 0;
-    const psEntry = psRemaining ? Math.max(uworldStart, uworldEnd - psOccurrencesNeeded * uworldOrder.length) : uworldEnd;
-    const entryDay = new Map(uworldOrder.map(section => [section, section === psSection ? psEntry : uworldStart]));
-    // first pass: walk the fixed cycle to see how many times each section actually lands on a day (entry gating can skip turns)
-    const sequence = [];
-    let pointer = 0;
-    for (let i = uworldStart; i < uworldEnd; i++) {
-      let picked = null;
-      for (let step = 0; step < uworldOrder.length; step++) {
-        const candidate = uworldOrder[(pointer + step) % uworldOrder.length];
-        if (i >= entryDay.get(candidate)) { picked = candidate; pointer = (pointer + step + 1) % uworldOrder.length; break; }
-      }
-      sequence.push(picked);
-    }
-    const occurrencesLeft = new Map(uworldOrder.map(section => [section, sequence.filter(picked => picked === section).length]));
-    const remainingBySection = new Map(uworldOrder.map(section => [section, Math.max(0, targetFor(section) - completedFor(section))]));
-    sequence.forEach((section, offset) => {
-      if (!section) return;
-      const remaining = remainingBySection.get(section);
-      const amount = Math.max(1, Math.ceil(remaining / occurrencesLeft.get(section)));
-      addTask(tasks, days[uworldStart + offset], section, `${amount} questions`);
-      remainingBySection.set(section, remaining - amount);
-      occurrencesLeft.set(section, occurrencesLeft.get(section) - 1);
-    });
-  }
-  scheduleSections(aamcSections, aamcStart, aamcEnd);
-  scheduleContent(tasks, days, uworldStart, preFLDays);
-  for (let i = days.length - 1; i >= Math.max(0, days.length - carsDays); i--) {
+  for (let i = N - 1; i >= Math.max(0, N - carsDays); i--) {
     const count = Math.min(carsRate, remainingCars);
-    addTask(tasks, days[i], "AAMC CARS", `${count} passages`);
+    if (count > 0) addTask(tasks, days[i], "AAMC CARS", `${count} passages`);
     remainingCars -= count;
   }
-  // once UWorld is done, sprinkle in re-review reps (amount scaled to the target percentages) alongside AAMC,
-  // every day (breaks/unavailable/FL days are already excluded from `days`) until the week of the exam
-  const uworldHasContent = uworldSections.some(section => targetFor(section) > 0);
-  if (uworldHasContent) {
-    const uworldTotalTarget = uworldSections.reduce((sum, section) => sum + targetFor(section), 0);
-    const reviewAmount = Math.max(10, Math.round(uworldTotalTarget / idealUworldDays));
+  // ---- once UWorld wraps up, keep re-reviewing missed questions until exam week ----
+  const uworldSections = ["UWorld B/B", "UWorld C/P", "UWorld P/S"];
+  if (ranges.uworld && uworldSections.some(section => targetFor(section) > 0)) {
+    const reviewAmount = Math.max(10, Math.round(uworldSections.reduce((total, section) => total + targetFor(section), 0) / IDEAL_UWORLD_DAYS));
     const reviewCutoff = addDays(exam, -7);
-    const reviewEnd = days.filter(date => date < reviewCutoff).length;
-    days.forEach((date, index) => {
-      if (index < uworldEnd || index >= reviewEnd) return;
-      addTask(tasks, date, "Re-Review UWorld Questions", `${reviewAmount} questions`);
-    });
+    days.forEach((date, index) => { if (index >= ranges.uworld.end && date < reviewCutoff) addTask(tasks, date, "Re-Review UWorld Questions", `${reviewAmount} questions`); });
   }
   days.forEach((date, index) => {
     if (!(tasks[dateKey(date)] || []).some(task => task.section === "AAMC CARS")) addTask(tasks, date, "Jack Westin", `${index === 0 ? 2 : 3} passages`);
   });
-  // daily Anki flashcard review runs the whole prep period, stopping once the exam's final week begins
   const ankiCutoff = addDays(exam, -7);
-  const ankiEnd = days.filter(date => date < ankiCutoff).length;
-  days.forEach((date, index) => {
-    if (index >= ankiEnd) return;
-    addTask(tasks, date, "Anki Flashcards", "Daily review");
-  });
+  days.forEach(date => { if (date < ankiCutoff) addTask(tasks, date, "Anki Flashcards", "Daily review"); });
   return tasks;
+}
+// Phase summary for the timeline: first/last date of each kind of work.
+function planPhases() {
+  const kinds = [["Content review", task => task.contentId !== undefined, "var(--content-bb)"], ["UWorld", task => /^UWorld /.test(task.section), "var(--uw-cp)"], ["AAMC", task => /^AAMC /.test(task.section) && task.section !== "AAMC CARS", "var(--aamc-cp)"]];
+  const phases = kinds.map(([name, test, color]) => { const dates = Object.entries(state.tasks).filter(([, list]) => list.some(test)).map(([key]) => key).sort(); return dates.length ? { name, color, start: dates[0], end: dates.at(-1) } : null; }).filter(Boolean);
+  const fls = Object.entries(state.fullLengths).filter(([, label]) => label !== "MCAT EXAM").map(([key]) => key).sort();
+  if (fls.length) phases.push({ name: "Full lengths", color: "var(--fl)", start: fls[0], end: fls.at(-1) });
+  return phases;
+}
+function timelineMarkup() {
+  if (!hasPlan()) return "";
+  const phases = planPhases();
+  const today = dateKey(new Date());
+  const startKey = [today, ...phases.map(p => p.start)].sort()[0];
+  const startTime = parseDate(startKey).getTime(), endTime = parseDate(state.examDate).getTime();
+  const span = Math.max(1, endTime - startTime);
+  const pos = key => Math.max(0, Math.min(100, (parseDate(key).getTime() - startTime) / span * 100));
+  const short = key => parseDate(key).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const rows = phases.map(p => `<div class="tl-row"><span class="tl-name">${p.name}</span><div class="tl-track"><div class="tl-bar" style="left:${pos(p.start)}%;width:${Math.max(1.5, pos(p.end) - pos(p.start))}%;--c:${p.color}"></div></div><span class="tl-dates">${short(p.start)} – ${short(p.end)}</span></div>`).join("");
+  const perDay = Object.values(state.tasks).map(list => ({ q: list.filter(t => /^(UWorld|AAMC) /.test(t.section) && /questions$/.test(t.detail)).reduce((n, t) => n + Number(t.detail.match(/\d+/)[0]), 0), c: list.filter(t => t.contentId !== undefined).length }));
+  const peakQ = Math.max(0, ...perDay.map(d => d.q)), peakC = Math.max(0, ...perDay.map(d => d.c));
+  const heavy = peakQ > 110 || peakC > 3 ? `<div class="tl-warn">⚠️ Heavy plan: up to ${peakQ} questions${peakC > 1 ? ` and ${peakC} content units` : ""} on your busiest days. Lowering targets or adding time will lighten it.</div>` : `<div class="tl-ok">✓ Busiest day: about ${peakQ} questions${peakC ? ` + ${peakC} content ${peakC === 1 ? "unit" : "units"}` : ""}.</div>`;
+  return `<section class="card timeline anim"><div class="card-head"><h2>Your study timeline</h2><span class="muted">${short(startKey)} → 🎯 ${short(state.examDate)}</span></div>${rows}${heavy}<p class="muted tl-note">Everything is spread across the time you have: content first, easing into UWorld, then AAMC, then full lengths.</p></section>`;
 }
 function addTask(tasks, date, section, detail, extra = {}) { const key = dateKey(date); if (!tasks[key]) tasks[key] = []; tasks[key].push({ date: key, section, label: `${section}: ${detail}`, detail, done: false, index: tasks[key].length, ...extra }); }
 function addCustomTask() {
@@ -573,30 +611,6 @@ function sectionShort(key) { return CONTENT_SECTIONS.find(section => section.key
 function newResource(section, title, unitLabel, count) { return { id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, section, source: "", title, unitLabel, count }; }
 function resourceTitle(resource) { return [resource.source, resource.title].filter(Boolean).join(" "); }
 
-function scheduleContent(tasks, days, uworldStart, preFLDays) {
-  const plan = state.content;
-  if (!plan?.schedule || !plan.resources.length || !days.length) return;
-  // spread each resource's remaining units evenly so every day mixes sections
-  const slots = [];
-  plan.resources.forEach(resource => {
-    const done = contentDoneSet(resource.id);
-    const remaining = [...Array(resourceCount(resource)).keys()].filter(i => !done.has(i));
-    remaining.forEach((unit, n) => slots.push({ resource, unit, position: (n + 0.5) / remaining.length }));
-  });
-  if (!slots.length) return;
-  slots.sort((a, b) => a.position - b.position || CONTENT_SECTIONS.findIndex(s => s.key === a.resource.section) - CONTENT_SECTIONS.findIndex(s => s.key === b.resource.section));
-  const total = slots.length;
-  const pace = Number(plan.pace);
-  // auto: finish before the first full length, never more than 3 a day
-  const window = Math.max(1, Math.min(days.length, pace > 0 ? Math.ceil(total / pace) : Math.max(preFLDays || uworldStart, Math.ceil(total / 3))));
-  for (let d = 0; d < window; d++) {
-    for (let k = Math.floor(d * total / window); k < Math.floor((d + 1) * total / window); k++) {
-      const { resource, unit } = slots[k];
-      addTask(tasks, days[d], `Content ${sectionShort(resource.section)}`, `${resourceTitle(resource)} · ${unitName(resource, unit)}`, { contentId: resource.id, unit });
-    }
-  }
-}
-
 let contentAddSection = null;
 function contentSetupMarkup() {
   const plan = state.content;
@@ -628,15 +642,12 @@ function contentSetupMarkup() {
   const kaplanButton = plan.resources.length ? "" : `<button type="button" class="btn kaplan-btn" data-content-kaplan>Use the Kaplan books <span class="muted">(recommended)</span></button>`;
   return `<section class="card setup-card content-setup" id="content-setup" style="--accent:var(--content-bb)">
     <h2 class="section-title">Content review</h2>
-    <p class="muted setup-lead">Tell us what you're studying from. Mix resources however you like — the calendar will assign chapters or videos each day.</p>
-    <div class="content-toolbar">
-      <label class="switch"><input type="checkbox" data-content-schedule ${plan.schedule ? "checked" : ""}><span></span>Put content review on my calendar</label>
-      <label class="pace">Pace<select data-content-pace ${plan.schedule ? "" : "disabled"}><option value="auto" ${plan.pace === "auto" ? "selected" : ""}>Finish before full lengths</option>${[1, 2, 3].map(n => `<option value="${n}" ${String(plan.pace) === String(n) ? "selected" : ""}>${n} per day</option>`).join("")}</select></label>
-    </div>
+    <p class="muted setup-lead">Add what you're studying from — mix resources however you like. Your calendar starts with content review and gradually shifts into practice, spread across all the time you have.</p>
     ${kaplanButton}
     <div class="content-sections">${sections}</div>
-    <p class="setup-note">Kaplan books start at 12 chapters — change the number if your edition is different. Check items off on the Today page and they won't be scheduled again.</p>
+    <p class="setup-note">Kaplan books start at 12 chapters — change the number if your edition is different. Leave a section empty if you don't need content review for it.</p>
   </section>
+  ${timelineMarkup()}
   <div class="setup-footer"><span class="muted">All set? Your calendar is built from everything above.</span>${hasPlan() ? '<button class="btn primary" data-action="update">↻ Update Calendar</button>' : '<button class="btn primary" data-action="generate">⚡ Generate Calendar</button>'}</div>`;
 }
 function refreshSetup(message) { saveState(); renderSetup(); enhanceUnavailablePicker(); if (message) showToast(message); }
@@ -674,8 +685,6 @@ document.addEventListener("change", event => {
     (pick.value === "other" ? form.querySelector("[data-other]") : form.querySelector("[data-count]")).focus();
     return;
   }
-  if (event.target.matches("[data-content-schedule]")) { state.content.schedule = event.target.checked; refreshSetup(); return; }
-  if (event.target.matches("[data-content-pace]")) { state.content.pace = event.target.value; saveState(); return; }
   if (event.target.matches("[data-resource-count]")) { const resource = state.content.resources.find(r => r.id === event.target.dataset.resourceCount); if (!resource) return; resource.count = Math.max(1, Math.min(400, Number(event.target.value) || 1)); state.contentDone[resource.id] = (state.contentDone[resource.id] || []).filter(i => i < resource.count); saveState(); }
 });
 
