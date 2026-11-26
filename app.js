@@ -26,6 +26,13 @@ state.reviews ||= [];
 state.customTasks ||= {};
 state.content ||= { schedule: true, pace: "auto", resources: [] };
 state.contentDone ||= {};
+(state.content.resources || []).forEach(resource => {
+  const isKhanVideos = /khan/i.test(resource.title || "") && /video/i.test(resource.title || "");
+  if (!isKhanVideos) return;
+  if (resource.section === "ps") {
+    if (resource.kit !== "khan-ps" || resource.unitLabel !== "Video" || [12, 291].includes(Number(resource.count))) { resource.kit = "khan-ps"; resource.unitLabel = "Video"; resource.count = 259; resource.effort ||= 0.065; }
+  } else if (!resource.kit) { resource.kit = "khan"; resource.unitLabel = "Video"; }
+});
 
 function loadState() {
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -51,8 +58,8 @@ function exportCombinedReport() {
   const legendChips = [...Object.entries(EXPORT_COLORS), ["Full-length exam", "#4f46e5"], ["Break / unavailable", "#64748b"]]
     .map(([label, color]) => `<span class="legend-chip"><span class="legend-dot" style="background:${color}"></span>${esc(label)}</span>`).join("");
   const monthsHtml = months.map(month => calendarMonthBlock(month, exam)).join("");
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Malik and Carolina's MCAT Planner Export</title><style>${EXPORT_CSS}</style></head><body>
-    <header class="print-head"><h1>Malik and Carolina's MCAT Planner</h1><p>Exported ${formatDate(new Date())} &mdash; calendar and progress through ${formatDate(exam)}</p><button class="print-btn no-print" onclick="window.print()">Print / Save as PDF</button></header>
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>MCAT Planner Export</title><style>${EXPORT_CSS}</style></head><body>
+    <header class="print-head"><h1>MCAT Planner</h1><p>Exported ${formatDate(new Date())} &mdash; calendar and progress through ${formatDate(exam)}</p><button class="print-btn no-print" onclick="window.print()">Print / Save as PDF</button></header>
     <h2 class="export-h2">Study calendar</h2>
     <div class="legend">${legendChips}</div>
     ${monthsHtml}
@@ -301,7 +308,7 @@ function renderToday() {
     </section>
     <div class="dashboard">
       <section class="card"><div class="card-head"><h2>Today's checklist</h2>${tasks.length ? `<span class="pill">${doneCount}/${tasks.length}</span>` : ""}</div><div class="stack today-list">${checklist}</div></section>
-      <aside class="right-panel stack"><section class="card countdown"><div class="ring ${donePct === 100 ? "complete" : ""}" style="--pct:${donePct};--from:${lastRingPct}"><div class="ring-value"><strong>${donePct}%</strong><small>${ringLabel}</small></div>${donePct === 100 && lastRingPct < 100 && tasks.length ? burstMarkup() : ""}</div></section><section class="card"><h2>Question progress</h2>${progressMarkup("UWorld", TOTALS.uworld)}${progressMarkup("AAMC", TOTALS.aamc)}</section></aside>
+      <aside class="right-panel stack"><section class="card countdown"><div class="ring ${donePct === 100 ? "complete" : ""}" style="--pct:${donePct};--from:${lastRingPct}"><div class="ring-value"><strong>${donePct}%</strong><small>${ringLabel}</small></div>${donePct === 100 && lastRingPct < 100 && tasks.length ? burstMarkup() : ""}</div></section>${krillionCard()}<section class="card"><h2>Question progress</h2>${progressMarkup("UWorld", TOTALS.uworld)}${progressMarkup("AAMC", TOTALS.aamc)}</section></aside>
     </div>`;
   lastRingPct = donePct;
   justToggled = null;
@@ -315,12 +322,25 @@ function contentKicker(task) {
 }
 // Short label for calendar cells and the export, matching the Today checklist wording:
 // "Psych/Soc videos: Processing the environment · 1–12 of 80", "Bio/Biochem reading: Kaplan Biology Review · Ch. 1".
+// Content detail without the repeated resource name, for kit resources like Khan videos:
+// "Processing the environment › Sensory perception · Videos 1–6 of 10".
+function contentDetail(task) {
+  const resource = state.content.resources.find(r => r.id === task.contentId);
+  const detail = task.detail || "";
+  return resource?.kit && resource.title && detail.startsWith(resource.title + " · ") ? detail.slice(resource.title.length + 3) : detail;
+}
 function displayLabel(task) {
   if (task.contentId === undefined) return task.label;
-  const resource = state.content.resources.find(r => r.id === task.contentId);
-  let detail = task.detail || "";
-  if (resource?.kit && resource.title && detail.startsWith(resource.title + " · ")) detail = detail.slice(resource.title.length + 3).replace(/\bVideos? (?=\d)/, "");
-  return `${contentKicker(task)}: ${detail}`;
+  return `${contentKicker(task)}: ${contentDetail(task).replace(/\bVideos? (?=\d)/, "").replace(/^[^·›]+ › /, "")}`;
+}
+// "Sensory perception" from a Khan topic task, for the watch button.
+function contentTopic(task) { const m = contentDetail(task).match(/› (.+?) · /); return m ? m[1] : ""; }
+function krillionCard() {
+  return `<a class="krillion-card" href="https://mcatkrillion.netlify.app" target="_blank" rel="noopener">
+    <span class="kc-atom" aria-hidden="true"><i></i><i></i><i></i><b></b></span>
+    <span class="kc-body"><span class="kc-kicker">Study break</span><strong>MCAT Krillion</strong><span class="kc-sub">7 rounds of “name a ___”, then every answer as a flashcard.</span></span>
+    <span class="kc-play">Play <span aria-hidden="true">↗</span></span>
+  </a>`;
 }
 function burstMarkup() {
   const colors = ["var(--cyan)", "var(--violet)", "var(--uw-bb)", "var(--anki)", "var(--aamc-independent)", "var(--uw-cp)"];
@@ -328,11 +348,11 @@ function burstMarkup() {
 }
 function taskMarkup(task, checkbox) {
   const resource = task.section === "Jack Westin" ? '<button type="button" class="task-resource" data-link="https://jackwestin.com/#daily-passages">Open daily passage ↗</button>'
-    : task.link ? `<span class="task-actions"><button type="button" class="task-resource" data-link="${esc(task.link)}">▶ Watch on YouTube ↗</button>${task.minutes ? `<span class="task-time">≈ ${task.minutes >= 90 ? `${Math.round(task.minutes / 6) / 10} hrs` : `${task.minutes} min`}</span>` : ""}</span>`
+    : task.link ? `<span class="task-actions"><button type="button" class="task-resource" data-link="${esc(task.link)}">▶ ${contentTopic(task) ? `Watch ${esc(contentTopic(task))}` : "Watch on YouTube"} ↗</button>${task.minutes ? `<span class="task-time">≈ ${task.minutes >= 90 ? `${Math.round(task.minutes / 6) / 10} hrs` : `${task.minutes} min`}</span>` : ""}</span>`
     : task.minutes ? `<span class="task-time">≈ ${task.minutes >= 90 ? `${Math.round(task.minutes / 6) / 10} hrs` : `${task.minutes} min`}</span>` : "";
   const identifier = task.custom ? `data-custom-task-date="${task.date}" data-custom-task-id="${task.id}"` : `data-task-date="${task.date}" data-task-index="${task.index}"`;
   const deleteButton = task.custom ? `<button type="button" class="task-delete" data-delete-task-date="${task.date}" data-delete-task-id="${task.id}" aria-label="Remove task">&times;</button>` : "";
-  return `<div class="task-row"><label class="task ${task.done ? "done" : ""} ${task.done && justToggled === (task.custom ? `c:${task.id}` : `t:${task.date}:${task.index}`) ? "just-done" : ""}" style="--c:${colorFor(task)}"><input type="checkbox" ${task.done ? "checked" : ""} ${identifier}><span class="task-body"><span class="task-section">${esc(contentKicker(task) || task.section)}</span><strong>${esc(task.detail || (task.custom ? "Personal study block" : task.label))}</strong>${resource}</span></label>${deleteButton}</div>`;
+  return `<div class="task-row"><label class="task ${task.done ? "done" : ""} ${task.done && justToggled === (task.custom ? `c:${task.id}` : `t:${task.date}:${task.index}`) ? "just-done" : ""}" style="--c:${colorFor(task)}"><input type="checkbox" ${task.done ? "checked" : ""} ${identifier}><span class="task-body"><span class="task-section">${esc(contentKicker(task) || task.section)}</span><strong>${esc(task.contentId !== undefined ? contentDetail(task) : task.detail || (task.custom ? "Personal study block" : task.label))}</strong>${resource}</span></label>${deleteButton}</div>`;
 }
 function progressMarkup(title, group) { return `<div class="section-title" style="margin-top:16px"><strong>${title}</strong></div>${Object.entries(group).map(([section, total]) => { const done = completedFor(section); const pct = total ? Math.min(100, Math.round(done / total * 100)) : 0; return `<div class="progress-row"><div class="progress-head"><span style="color:${COLORS[section]}">${esc(section.replace("UWorld ", "").replace("AAMC ", ""))}</span><span>${done} / ${total}</span></div><div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${COLORS[section]}"></div></div></div>`; }).join("")}`; }
 
@@ -636,15 +656,30 @@ const CONTENT_SECTIONS = [
 const CONTENT_OPTIONS = {
   bb: [["Kaplan Biology Review", "Chapter", 12], ["Kaplan Biochemistry Review", "Chapter", 12], ["Khan Academy Bio/Biochem videos", "Video", 368, 0.065, "khan"], ["Blueprint", "Chapter"], ["Princeton Review", "Chapter"]],
   cp: [["Kaplan General Chemistry Review", "Chapter", 12], ["Kaplan Organic Chemistry Review", "Chapter", 12], ["Kaplan Physics & Math Review", "Chapter", 12], ["Khan Academy Chem/Phys videos", "Video", 456, 0.065, "khan"], ["Blueprint", "Chapter"], ["Princeton Review", "Chapter"]],
-  ps: [["Khan Academy Psych/Soc videos (recommended)", "Video", 291, 0.065, "khan-ps"], ["Khan Academy 300-page Psych/Soc document", "Page", 300, 0.05], ["Kaplan Behavioral Sciences Review", "Chapter", 12], ["Blueprint", "Chapter"], ["Princeton Review", "Chapter"]]
+  ps: [["Khan Academy Psych/Soc videos (recommended)", "Video", 259, 0.065, "khan-ps"], ["Khan Academy 300-page Psych/Soc document", "Page", 300, 0.05], ["Kaplan Behavioral Sciences Review", "Chapter", 12], ["Blueprint", "Chapter"], ["Princeton Review", "Chapter"]]
 };
 const RECOMMENDED_SET = { bb: [0, 1], cp: [0, 1, 2], ps: [0] };
 const optionName = name => name.replace(" (recommended)", "");
 // Khan Academy MCAT videos live on the @KhanAcademyMCATprep YouTube channel. P/S is five playlists, in course order.
 const KHAN_CHANNEL = "https://www.youtube.com/@KhanAcademyMCATprep";
 const khanSearch = topic => `${KHAN_CHANNEL}/search?query=${encodeURIComponent(topic)}`;
-const KHAN_PS_PLAYLISTS = [["Processing the environment", 80], ["Behavior", 108], ["Individuals and society", 58], ["Society and culture", 32], ["Social inequality", 13]];
-const RESOURCE_KITS = { "khan-ps": { link: KHAN_CHANNEL + "/playlists", minutes: 5.7, segments: KHAN_PS_PLAYLISTS.map(([name, count]) => ({ name, count, link: khanSearch(name) })) }, khan: { link: KHAN_CHANNEL + "/playlists", minutes: 6 } };
+// Khan Academy's MCAT Psych/Soc course, topic by topic: [unit, topic, videos, minutes]. 259 videos, ~27.7 hrs.
+const KHAN_PS_TOPICS = [
+  ["Processing the environment", "Sensory perception", 10, 65], ["Processing the environment", "Sight (vision)", 7, 51], ["Processing the environment", "Sound (audition)", 4, 22],
+  ["Processing the environment", "Somatosensation", 5, 28], ["Processing the environment", "Taste and smell", 3, 34], ["Processing the environment", "Sleep and consciousness", 7, 40],
+  ["Processing the environment", "Drug dependence", 9, 48], ["Processing the environment", "Attention", 3, 19], ["Processing the environment", "Memory", 9, 40],
+  ["Processing the environment", "Cognition", 6, 33], ["Processing the environment", "Language", 3, 15], ["Processing the environment", "Emotion", 5, 48], ["Processing the environment", "Stress", 6, 45],
+  ["Behavior", "Nervous system", 20, 159], ["Behavior", "Endocrine system", 2, 18], ["Behavior", "Behavior and genetics", 6, 52], ["Behavior", "Motivation and attitudes", 10, 60],
+  ["Behavior", "Theories of personality", 7, 49], ["Behavior", "Psychological disorders", 6, 63], ["Behavior", "Social psychology", 12, 76],
+  ["Behavior", "Normative and non-normative behavior", 3, 21], ["Behavior", "Learning", 8, 54], ["Behavior", "Attitude and behavior change", 7, 44],
+  ["Individuals and society", "Self-identity", 10, 98], ["Individuals and society", "Perception, prejudice, and bias", 10, 59], ["Individuals and society", "Social behavior", 8, 42],
+  ["Individuals and society", "Social interactions", 15, 65], ["Individuals and society", "Self-presentation", 5, 31], ["Individuals and society", "Social behavior in animals", 3, 12],
+  ["Individuals and society", "Discrimination", 3, 14],
+  ["Society and culture", "Social structures", 13, 69], ["Society and culture", "Demographics", 12, 84], ["Society and culture", "Culture", 8, 32],
+  ["Social inequality", "Social inequality", 14, 70]
+];
+const KHAN_PS_TOTAL = KHAN_PS_TOPICS.reduce((sum, t) => sum + t[2], 0);
+const RESOURCE_KITS = { "khan-ps": { link: KHAN_CHANNEL + "/playlists", minutes: 6.4, segments: KHAN_PS_TOPICS.map(([unit, name, count, minutes]) => ({ unit, name, count, minutes, link: khanSearch(`MCAT ${name}`) })) }, khan: { link: KHAN_CHANNEL + "/playlists", minutes: 6 } };
 const kitFor = resource => RESOURCE_KITS[resource.kit] || {};
 // Which playlist a unit falls in (for segmented resources like Khan P/S), and its number within it.
 function segmentOf(resource, unit) {
@@ -660,11 +695,11 @@ function unitRange(resource, units) {
   const seg = segmentOf(resource, units[0]);
   const first = (seg ? seg.local : units[0]) + 1, last = first + units.length - 1;
   const label = resource.unitLabel === "Chapter" ? (first === last ? `Ch. ${first}` : `Ch. ${first}–${last}`) : first === last ? `${resource.unitLabel} ${first}` : `${resource.unitLabel}s ${first}–${last}`;
-  return seg ? `${seg.segment.name} · ${label} of ${seg.segment.count}` : label;
+  return seg ? `${seg.segment.unit && seg.segment.unit !== seg.segment.name ? `${seg.segment.unit} › ` : ""}${seg.segment.name} · ${label} of ${seg.segment.count}` : label;
 }
 function contentTaskExtra(resource, units) {
   const kit = kitFor(resource); const seg = segmentOf(resource, units[0]);
-  const perUnit = kit.minutes ?? UNIT_MINUTES[resource.unitLabel];
+  const perUnit = seg?.segment.minutes ? seg.segment.minutes / seg.segment.count : kit.minutes ?? UNIT_MINUTES[resource.unitLabel];
   return { contentId: resource.id, units, ...(seg?.segment.link || kit.link ? { link: seg?.segment.link || kit.link } : {}), ...(perUnit ? { minutes: Math.round(perUnit * units.length) } : {}) };
 }
 function contentDoneSet(id) { return new Set(state.contentDone[id] || []); }

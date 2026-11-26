@@ -573,3 +573,111 @@ nav button.active { background: transparent; box-shadow: none; }
   .hero-value { font-size: 40px; }
   .card { padding: 18px; }
 }
+
+/* ---------- Opening animation: ECG trace -> logo mark -> name writes out ---------- */
+.no-splash .splash { display: none; }
+.splash { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 45%, rgb(var(--a2) / .14), transparent 60%), var(--bg); cursor: pointer; }
+.splash.leaving { animation: splash-out .55s ease forwards; }
+.splash-stage { position: relative; display: grid; place-items: center; width: min(640px, 92vw); height: 180px; }
+.splash-ecg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; animation: splash-ecg-out .35s cubic-bezier(.6, 0, .4, 1) 1.15s forwards; }
+.splash-ecg path { fill: none; stroke: url(#splash-grad); stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 1; filter: drop-shadow(0 0 6px rgb(var(--a1) / .8)); animation: splash-draw 1.1s cubic-bezier(.55, 0, .35, 1) forwards; }
+.splash-dot { fill: #fff; filter: drop-shadow(0 0 6px rgb(var(--a1))) drop-shadow(0 0 14px rgb(var(--a2))); }
+.splash-logo { display: flex; align-items: center; gap: 18px; }
+.splash-mark { display: grid; place-items: center; width: 68px; height: 68px; flex: none; border-radius: 20px; background: var(--grad); color: var(--on-accent); box-shadow: 0 0 0 1px rgb(var(--a2) / .4), 0 0 50px rgb(var(--a2) / .45); opacity: 0; transform: scale(.4); animation: splash-pop .5s cubic-bezier(.3, 1.5, .5, 1) 1.2s forwards, splash-beat .9s ease-in-out 1.9s 2; }
+.splash-mark svg { width: 38px; height: 38px; }
+.splash-mark path { stroke-dasharray: 1; stroke-dashoffset: 1; animation: splash-draw .45s ease-out 1.35s forwards; }
+.splash-text { display: flex; flex-direction: column; font-family: var(--display); white-space: nowrap; }
+.splash-small { font-size: 17px; font-weight: 500; color: var(--ink-2); }
+.splash-big { font-size: 36px; font-weight: 700; line-height: 1.05; color: var(--ink); }
+.splash-text i { display: inline-block; font-style: normal; opacity: 0; transform: translateY(8px); filter: blur(4px); animation: splash-letter .35s ease-out calc(1.5s + var(--i) * 26ms) forwards; }
+@keyframes splash-draw { to { stroke-dashoffset: 0; } }
+@keyframes splash-ecg-out { to { opacity: 0; transform: scaleX(.12); } }
+@keyframes splash-pop { to { opacity: 1; transform: scale(1); } }
+@keyframes splash-beat { 0%, 100% { transform: scale(1); } 15% { transform: scale(1.08); } 30% { transform: scale(.98); } 45% { transform: scale(1.05); } }
+@keyframes splash-letter { to { opacity: 1; transform: none; filter: none; } }
+@keyframes splash-out { to { opacity: 0; visibility: hidden; } }
+@media (max-width: 520px) { .splash-mark { width: 54px; height: 54px; border-radius: 16px; } .splash-mark svg { width: 30px; height: 30px; } .splash-small { font-size: 14px; } .splash-big { font-size: 28px; } }
+
+/* ---------- More accent themes ---------- */
+[data-theme="ocean"] {
+  --a1: 96 165 250; --a2: 59 130 246; --a3: 45 212 191; --on-accent: #04101f;
+  --bg-rgb: 5 10 20; --panel-rgb: 13 22 40; --well-rgb: 4 8 16; --bg-2: #0a1324; --panel-solid: #0e1830;
+}
+[data-theme="rose"] {
+  --a1: 251 113 133; --a2: 236 72 153; --a3: 196 181 253; --on-accent: #1f0612;
+  --bg-rgb: 14 8 14; --panel-rgb: 30 17 28; --well-rgb: 10 6 10; --bg-2: #1a0e18; --panel-solid: #1e111c;
+}
+.theme-dot[data-theme-set="ocean"] { --sw: linear-gradient(135deg, #60a5fa, #3b82f6, #2dd4bf); }
+.theme-dot[data-theme-set="rose"] { --sw: linear-gradient(135deg, #fb7185, #ec4899, #c4b5fd); }
+.theme-sep { width: 1px; margin: 2px 2px; background: var(--line-strong); }
+.mode-toggle { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--ink-2); transition: transform .3s var(--ease-spring), color .2s; }
+.mode-toggle:hover { transform: rotate(25deg) scale(1.15); color: var(--ink); }
+.mode-toggle svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.mode-toggle .i-moon { display: none; }
+html[data-mode="light"] .mode-toggle .i-sun { display: none; }
+html[data-mode="light"] .mode-toggle .i-moon { display: block; }
+
+/* ---------- Light mode (works with every accent theme) ---------- */
+html[data-mode="light"] {
+  color-scheme: light;
+  --bg-rgb: 243 246 250; --panel-rgb: 255 255 255; --well-rgb: 236 241 246;
+  --bg: rgb(var(--bg-rgb)); --bg-2: #eaf0f5;
+  --panel: rgb(255 255 255 / .86); --panel-solid: #ffffff; --panel-2: rgba(15, 23, 42, .035);
+  --ink: #0f172a; --ink-2: #334155; --muted: #64748b;
+  --line: rgba(15, 23, 42, .10); --line-strong: rgba(15, 23, 42, .18);
+  --surface-tint: rgba(15, 23, 42, .03);
+  --shadow: 0 14px 34px rgba(15, 23, 42, .08);
+  --cyan: color-mix(in srgb, rgb(var(--a1)) 62%, #0b1220);
+  --violet: color-mix(in srgb, rgb(var(--a3)) 62%, #0b1220);
+  --uw-cp: #2563eb; --uw-bb: #059669; --uw-cars: #ea580c; --uw-ps: #9333ea;
+  --aamc-bio: #0d9488; --aamc-cp: #dc2626; --aamc-cars: #ea580c; --aamc-independent: #d97706;
+  --jw: #64748b; --anki: #db2777; --rereview: #0284c7; --custom: #7c3aed; --fl: #4f46e5;
+  --content-bb: #65a30d; --content-cp: #0891b2; --content-ps: #c026d3;
+}
+html[data-mode="light"] .bg-glow {
+  background:
+    radial-gradient(900px 500px at 8% -10%, rgb(var(--a1) / .18), transparent 60%),
+    radial-gradient(800px 600px at 100% 0%, rgb(var(--a3) / .16), transparent 60%),
+    radial-gradient(700px 500px at 50% 110%, rgb(var(--a2) / .12), transparent 60%),
+    linear-gradient(rgba(15, 23, 42, .04) 1px, transparent 1px) 0 0 / 40px 40px,
+    linear-gradient(90deg, rgba(15, 23, 42, .04) 1px, transparent 1px) 0 0 / 40px 40px,
+    var(--bg);
+}
+html[data-mode="light"] .theme-switch { background: rgba(15, 23, 42, .04); }
+html[data-mode="light"] .card, html[data-mode="light"] .stat { box-shadow: var(--shadow); }
+html[data-mode="light"] .krillion-link { color: #9d174d; }
+html[data-mode="light"] .krillion-link:hover { color: #831843; }
+
+/* ---------- MCAT Krillion card on the Today dashboard ---------- */
+.krillion-card { position: relative; display: flex; align-items: center; gap: 16px; padding: 18px 18px; border-radius: var(--radius); text-decoration: none; color: var(--ink); overflow: hidden; isolation: isolate;
+  background: linear-gradient(135deg, rgba(244, 114, 182, .16), rgba(251, 191, 36, .10) 55%, rgba(168, 85, 247, .14)), var(--panel-solid);
+  border: 1px solid rgba(244, 114, 182, .35); transition: transform .3s var(--ease-spring), box-shadow .3s, border-color .3s; }
+.krillion-card::before { content: ""; position: absolute; inset: -40%; z-index: -1; background: conic-gradient(from 0deg, transparent 0 70%, rgba(244, 114, 182, .35) 80%, rgba(251, 191, 36, .35) 88%, transparent 96%); animation: atom-spin 7s linear infinite; opacity: .55; }
+.krillion-card::after { content: ""; position: absolute; inset: 1px; z-index: -1; border-radius: calc(var(--radius) - 1px); background: linear-gradient(135deg, rgba(244, 114, 182, .12), rgba(251, 191, 36, .06) 55%, rgba(168, 85, 247, .10)), var(--panel-solid); }
+.krillion-card:hover { transform: translateY(-3px); border-color: #f472b6; box-shadow: 0 14px 36px rgba(244, 114, 182, .28); }
+.kc-atom { position: relative; width: 54px; height: 54px; flex: none; animation: atom-spin 9s linear infinite; }
+.krillion-card:hover .kc-atom { animation-duration: 1.6s; }
+.kc-atom i { position: absolute; inset: 15px 0; border: 2px solid rgba(251, 191, 36, .85); border-radius: 50%; }
+.kc-atom i:nth-child(2) { transform: rotate(60deg); border-color: rgba(244, 114, 182, .85); }
+.kc-atom i:nth-child(3) { transform: rotate(120deg); border-color: rgba(168, 85, 247, .85); }
+.kc-atom b { position: absolute; inset: 20px; border-radius: 50%; background: #f472b6; box-shadow: 0 0 14px #f472b6, 0 0 28px rgba(251, 191, 36, .6); animation: pulse 1.8s ease-in-out infinite; }
+.kc-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.kc-kicker { font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #f472b6; }
+.kc-body strong { font: 700 19px var(--display); background: linear-gradient(90deg, #f472b6, #fbbf24); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.kc-sub { font-size: 12.5px; color: var(--ink-2); line-height: 1.4; }
+.kc-play { flex: none; padding: 8px 14px; border-radius: 10px; background: linear-gradient(135deg, #f472b6, #fbbf24); color: #1f0612; font-weight: 700; font-size: 13px; box-shadow: 0 6px 18px rgba(244, 114, 182, .35); transition: transform .25s var(--ease-spring); }
+.krillion-card:hover .kc-play { transform: scale(1.06); }
+html[data-mode="light"] .kc-kicker { color: #be185d; }
+html[data-mode="light"] .kc-body strong { background: linear-gradient(90deg, #db2777, #d97706); -webkit-background-clip: text; background-clip: text; }
+html[data-mode="light"] nav button.active, html[data-mode="light"] .section-score-tab.active, html[data-mode="light"] .review-filter-chip.active, html[data-mode="light"] .review-filter-chip:hover { color: var(--ink); }
+html[data-mode="light"] .task-resource { background: rgba(15, 23, 42, .03); }
+html[data-mode="light"] .splash-dot { fill: rgb(var(--a2)); }
+.brand-text b { font-size: 16px; }
+/* splash greeting: rises in under the logo after the name writes out */
+.splash-stage { height: 240px; }
+.splash-ecg { top: 0; bottom: 60px; }
+.splash-logo { transform: translateY(-30px); }
+.splash-greeting { position: absolute; left: 0; right: 0; bottom: 34px; margin: 0; text-align: center; font: 600 22px var(--display); color: var(--ink-2); letter-spacing: .01em; }
+.splash-greeting span { display: inline-block; opacity: 0; transform: translateY(12px); filter: blur(6px); animation: splash-letter .6s cubic-bezier(.16, 1, .3, 1) 2.05s forwards; }
+.splash-greeting .sg-doc { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; animation-delay: 2.35s; }
+@media (max-width: 520px) { .splash-greeting { font-size: 18px; } }
