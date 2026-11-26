@@ -305,15 +305,24 @@ function renderToday() {
   lastRingPct = donePct;
   justToggled = null;
 }
+function contentKicker(task) {
+  if (task.contentId === undefined) return "";
+  const resource = state.content.resources.find(r => r.id === task.contentId);
+  const section = CONTENT_SECTIONS.find(c => c.short === task.section.replace("Content ", ""))?.label || "";
+  const kind = { Video: "videos", Lesson: "lessons", Page: "reading", Chapter: "reading" }[resource?.unitLabel] || "content";
+  return `${section} ${kind}`.trim();
+}
 function burstMarkup() {
   const colors = ["var(--cyan)", "var(--violet)", "var(--uw-bb)", "var(--anki)", "var(--aamc-independent)", "var(--uw-cp)"];
   return `<div class="burst" aria-hidden="true">${Array.from({ length: 22 }, (_, i) => { const angle = i / 22 * Math.PI * 2; const dist = 95 + (i % 4) * 18; return `<i style="--c:${colors[i % colors.length]};--x:${Math.round(Math.cos(angle) * dist)}px;--y:${Math.round(Math.sin(angle) * dist)}px;animation-delay:${(i % 5) * 25 + 350}ms"></i>`; }).join("")}</div>`;
 }
 function taskMarkup(task, checkbox) {
-  const resource = task.section === "Jack Westin" ? '<button type="button" class="task-resource" data-link="https://jackwestin.com/#daily-passages">Open daily passage ↗</button>' : "";
+  const resource = task.section === "Jack Westin" ? '<button type="button" class="task-resource" data-link="https://jackwestin.com/#daily-passages">Open daily passage ↗</button>'
+    : task.link ? `<span class="task-actions"><button type="button" class="task-resource" data-link="${esc(task.link)}">▶ Watch on YouTube ↗</button>${task.minutes ? `<span class="task-time">≈ ${task.minutes >= 90 ? `${Math.round(task.minutes / 6) / 10} hrs` : `${task.minutes} min`}</span>` : ""}</span>`
+    : task.minutes ? `<span class="task-time">≈ ${task.minutes >= 90 ? `${Math.round(task.minutes / 6) / 10} hrs` : `${task.minutes} min`}</span>` : "";
   const identifier = task.custom ? `data-custom-task-date="${task.date}" data-custom-task-id="${task.id}"` : `data-task-date="${task.date}" data-task-index="${task.index}"`;
   const deleteButton = task.custom ? `<button type="button" class="task-delete" data-delete-task-date="${task.date}" data-delete-task-id="${task.id}" aria-label="Remove task">&times;</button>` : "";
-  return `<div class="task-row"><label class="task ${task.done ? "done" : ""} ${task.done && justToggled === (task.custom ? `c:${task.id}` : `t:${task.date}:${task.index}`) ? "just-done" : ""}" style="--c:${colorFor(task)}"><input type="checkbox" ${task.done ? "checked" : ""} ${identifier}><span class="task-body"><span class="task-section">${esc(task.section)}</span><strong>${esc(task.detail || (task.custom ? "Personal study block" : task.label))}</strong>${resource}</span></label>${deleteButton}</div>`;
+  return `<div class="task-row"><label class="task ${task.done ? "done" : ""} ${task.done && justToggled === (task.custom ? `c:${task.id}` : `t:${task.date}:${task.index}`) ? "just-done" : ""}" style="--c:${colorFor(task)}"><input type="checkbox" ${task.done ? "checked" : ""} ${identifier}><span class="task-body"><span class="task-section">${esc(contentKicker(task) || task.section)}</span><strong>${esc(task.detail || (task.custom ? "Personal study block" : task.label))}</strong>${resource}</span></label>${deleteButton}</div>`;
 }
 function progressMarkup(title, group) { return `<div class="section-title" style="margin-top:16px"><strong>${title}</strong></div>${Object.entries(group).map(([section, total]) => { const done = completedFor(section); const pct = total ? Math.min(100, Math.round(done / total * 100)) : 0; return `<div class="progress-row"><div class="progress-head"><span style="color:${COLORS[section]}">${esc(section.replace("UWorld ", "").replace("AAMC ", ""))}</span><span>${done} / ${total}</span></div><div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${COLORS[section]}"></div></div></div>`; }).join("")}`; }
 
@@ -346,7 +355,9 @@ function generatePlan() { readSetup(); const exam = parseDate(state.examDate); i
 function availableDays(exam) { const days = []; const start = new Date(); start.setHours(12, 0, 0, 0); const unavailable = state.unavailable.split(",").map(value => value.trim()).filter(Boolean); for (let date = start; date < exam; date = addDays(date, 1)) { const key = dateKey(date); const preExam = key === dateKey(addDays(exam, -1)); if (!unavailable.includes(key) && !state.breaks.includes(DAY_NAMES[date.getDay()]) && !preExam && !state.fullLengths[key]) days.push(date); } return days; }
 function firstFullLengthDate() { const dates = Object.entries(state.fullLengths).filter(([, label]) => label !== "MCAT EXAM").map(([key]) => key).sort(); return dates.length ? parseDate(dates[0]) : null; }
 // Effort per content unit, in "study days" (a textbook chapter ≈ a day of content work).
-const UNIT_EFFORT = { Chapter: 0.8, Lesson: 0.4, Video: 0.1, Page: 0.035 };
+const UNIT_EFFORT = { Chapter: 0.8, Lesson: 0.4, Video: 0.1, Page: 0.05 };
+const EFFORT_HOURS = 3.75; // 1 effort ≈ 3.75 study hours (a Kaplan chapter ≈ 3 hrs)
+const UNIT_MINUTES = { Video: 6, Page: 10 };
 const unitEffort = resource => resource.effort ?? UNIT_EFFORT[resource.unitLabel] ?? 0.8;
 const UWORLD_PER_DAY = 50, AAMC_PER_DAY = 35, IDEAL_UWORLD_DAYS = 45;
 // Weight for each day in [start, end): ramps up over rampIn days and down over rampOut days, so phases hand off gradually.
@@ -425,7 +436,7 @@ function buildTasks(exam) {
     // Content must be finished before the first full length (but never more than 3 units a day);
     // UWorld then AAMC share whatever time is left, in proportion to their workload.
     const firstFL = flStart ? days.filter(date => date < flStart).length : N;
-    const minContentDays = Math.ceil(effort.content / 2.4); // at most ~3 chapters' worth a day
+    const minContentDays = Math.ceil(effort.content / 2.4); // at most ~9 hrs of content a day
     let contentEnd = order.includes("content") ? N * effort.content / totalEffort : 0;
     if (order.includes("content") && order.length > 1) contentEnd = Math.min(contentEnd, Math.max(firstFL, minContentDays));
     contentEnd = Math.min(N, contentEnd);
@@ -466,8 +477,8 @@ function buildTasks(exam) {
       byResource.forEach((units, resource) => {
         units.sort((a, b) => a - b);
         let group = [units[0]];
-        const flush = () => (perDay[day] ||= []).push([`Content ${sectionShort(resource.section)}`, `${resourceTitle(resource)} · ${unitRange(resource, group)}`, { contentId: resource.id, units: group }]);
-        units.slice(1).forEach(unit => { if (unit === group.at(-1) + 1) group.push(unit); else { flush(); group = [unit]; } });
+        const flush = () => (perDay[day] ||= []).push([`Content ${sectionShort(resource.section)}`, `${resourceTitle(resource)} · ${unitRange(resource, group)}`, contentTaskExtra(resource, group)]);
+        units.slice(1).forEach(unit => { if (unit === group.at(-1) + 1 && segmentOf(resource, unit)?.segment === segmentOf(resource, group[0])?.segment) group.push(unit); else { flush(); group = [unit]; } });
         flush();
       });
     });
@@ -520,7 +531,7 @@ function timelineMarkup() {
   const rows = phases.map(p => `<div class="tl-row"><span class="tl-name">${p.name}</span><div class="tl-track"><div class="tl-bar" style="left:${pos(p.start)}%;width:${Math.max(1.5, pos(p.end) - pos(p.start))}%;--c:${p.color}"></div></div><span class="tl-dates">${short(p.start)} – ${short(p.end)}</span></div>`).join("");
   const perDay = Object.values(state.tasks).map(list => ({ q: list.filter(t => /^(UWorld|AAMC) /.test(t.section) && /questions$/.test(t.detail)).reduce((n, t) => n + Number(t.detail.match(/\d+/)[0]), 0), c: list.filter(t => t.contentId !== undefined).reduce((n, t) => { const r = state.content.resources.find(x => x.id === t.contentId); return n + (r ? unitEffort(r) * (t.units?.length || 1) : 0); }, 0) }));
   const peakQ = Math.max(0, ...perDay.map(d => d.q)), peakC = Math.max(0, ...perDay.map(d => d.c));
-  const heavy = peakQ > 110 || peakC > 2.5 ? `<div class="tl-warn">⚠️ Heavy plan: up to ${peakQ} questions${peakC > 2.5 ? ` and about ${Math.round(peakC / 0.8 * 10) / 10} chapters' worth of content` : ""} on your busiest days. Lowering targets or adding time will lighten it.</div>` : `<div class="tl-ok">✓ Busiest day: about ${peakQ} questions${peakC ? ` + about ${Math.max(1, Math.round(peakC / 0.8 * 10) / 10)} chapters' worth of content` : ""}.</div>`;
+  const heavy = peakQ > 110 || peakC > 2.5 ? `<div class="tl-warn">⚠️ Heavy plan: up to ${peakQ} questions${peakC > 2.5 ? ` and about ${Math.round(peakC * EFFORT_HOURS)} hrs of content` : ""} on your busiest days. Lowering targets or adding time will lighten it.</div>` : `<div class="tl-ok">✓ Busiest day: about ${peakQ} questions${peakC ? ` + about ${Math.max(1, Math.round(peakC * EFFORT_HOURS * 2) / 2)} hrs of content review` : ""}.</div>`;
   return `<section class="card timeline anim"><div class="card-head"><h2>Your study timeline</h2><span class="muted">${short(startKey)} → 🎯 ${short(state.examDate)}</span></div>${rows}${heavy}<p class="muted tl-note">Everything is spread across the time you have: content first, easing into UWorld, then AAMC, then full lengths.</p></section>`;
 }
 function addTask(tasks, date, section, detail, extra = {}) { const key = dateKey(date); if (!tasks[key]) tasks[key] = []; tasks[key].push({ date: key, section, label: `${section}: ${detail}`, detail, done: false, index: tasks[key].length, ...extra }); }
@@ -613,18 +624,38 @@ const CONTENT_SECTIONS = [
 // [name, unit, default count, effort per unit]. Khan video counts are the MCAT playlists' totals (editable);
 // a Khan video is ~6 min, so it counts as a small fraction of a textbook chapter.
 const CONTENT_OPTIONS = {
-  bb: [["Kaplan Biology Review", "Chapter", 12], ["Kaplan Biochemistry Review", "Chapter", 12], ["Khan Academy Bio/Biochem videos", "Video", 368, 0.065], ["Blueprint", "Chapter"], ["Princeton Review", "Chapter"]],
-  cp: [["Kaplan General Chemistry Review", "Chapter", 12], ["Kaplan Organic Chemistry Review", "Chapter", 12], ["Kaplan Physics & Math Review", "Chapter", 12], ["Khan Academy Chem/Phys videos", "Video", 456, 0.065], ["Blueprint", "Chapter"], ["Princeton Review", "Chapter"]],
-  ps: [["Khan Academy Psych/Soc videos (recommended)", "Video", 291, 0.065], ["Khan Academy 300-page Psych/Soc document", "Page", 300, 0.035], ["Kaplan Behavioral Sciences Review", "Chapter", 12], ["Blueprint", "Chapter"], ["Princeton Review", "Chapter"]]
+  bb: [["Kaplan Biology Review", "Chapter", 12], ["Kaplan Biochemistry Review", "Chapter", 12], ["Khan Academy Bio/Biochem videos", "Video", 368, 0.065, "khan"], ["Blueprint", "Chapter"], ["Princeton Review", "Chapter"]],
+  cp: [["Kaplan General Chemistry Review", "Chapter", 12], ["Kaplan Organic Chemistry Review", "Chapter", 12], ["Kaplan Physics & Math Review", "Chapter", 12], ["Khan Academy Chem/Phys videos", "Video", 456, 0.065, "khan"], ["Blueprint", "Chapter"], ["Princeton Review", "Chapter"]],
+  ps: [["Khan Academy Psych/Soc videos (recommended)", "Video", 291, 0.065, "khan-ps"], ["Khan Academy 300-page Psych/Soc document", "Page", 300, 0.05], ["Kaplan Behavioral Sciences Review", "Chapter", 12], ["Blueprint", "Chapter"], ["Princeton Review", "Chapter"]]
 };
 const RECOMMENDED_SET = { bb: [0, 1], cp: [0, 1, 2], ps: [0] };
 const optionName = name => name.replace(" (recommended)", "");
+// Khan Academy MCAT videos live on the @KhanAcademyMCATprep YouTube channel. P/S is five playlists, in course order.
+const KHAN_CHANNEL = "https://www.youtube.com/@KhanAcademyMCATprep";
+const khanSearch = topic => `${KHAN_CHANNEL}/search?query=${encodeURIComponent(topic)}`;
+const KHAN_PS_PLAYLISTS = [["Processing the environment", 80], ["Behavior", 108], ["Individuals and society", 58], ["Society and culture", 32], ["Social inequality", 13]];
+const RESOURCE_KITS = { "khan-ps": { link: KHAN_CHANNEL + "/playlists", minutes: 5.7, segments: KHAN_PS_PLAYLISTS.map(([name, count]) => ({ name, count, link: khanSearch(name) })) }, khan: { link: KHAN_CHANNEL + "/playlists", minutes: 6 } };
+const kitFor = resource => RESOURCE_KITS[resource.kit] || {};
+// Which playlist a unit falls in (for segmented resources like Khan P/S), and its number within it.
+function segmentOf(resource, unit) {
+  const segments = kitFor(resource).segments;
+  if (!segments) return null;
+  let start = 0;
+  for (const segment of segments) { if (unit < start + segment.count) return { segment, local: unit - start }; start += segment.count; }
+  return null;
+}
 function resourceCount(resource) { return Number(resource.count) || 0; }
 function unitName(resource, i) { return resource.unitLabel === "Chapter" ? `Ch. ${i + 1}` : `${resource.unitLabel} ${i + 1}`; }
 function unitRange(resource, units) {
-  const first = units[0] + 1, last = units.at(-1) + 1;
-  if (first === last) return unitName(resource, units[0]);
-  return resource.unitLabel === "Chapter" ? `Ch. ${first}–${last}` : `${resource.unitLabel}s ${first}–${last}`;
+  const seg = segmentOf(resource, units[0]);
+  const first = (seg ? seg.local : units[0]) + 1, last = first + units.length - 1;
+  const label = resource.unitLabel === "Chapter" ? (first === last ? `Ch. ${first}` : `Ch. ${first}–${last}`) : first === last ? `${resource.unitLabel} ${first}` : `${resource.unitLabel}s ${first}–${last}`;
+  return seg ? `${seg.segment.name} · ${label} of ${seg.segment.count}` : label;
+}
+function contentTaskExtra(resource, units) {
+  const kit = kitFor(resource); const seg = segmentOf(resource, units[0]);
+  const perUnit = kit.minutes ?? UNIT_MINUTES[resource.unitLabel];
+  return { contentId: resource.id, units, ...(seg?.segment.link || kit.link ? { link: seg?.segment.link || kit.link } : {}), ...(perUnit ? { minutes: Math.round(perUnit * units.length) } : {}) };
 }
 function contentDoneSet(id) { return new Set(state.contentDone[id] || []); }
 function setContentDone(id, unit, done) {
@@ -633,7 +664,7 @@ function setContentDone(id, unit, done) {
   state.contentDone[id] = [...set].sort((a, b) => a - b);
 }
 function sectionShort(key) { return CONTENT_SECTIONS.find(section => section.key === key)?.short || key; }
-function newResource(section, title, unitLabel, count, effort) { return { id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, section, source: "", title, unitLabel, count, ...(effort ? { effort } : {}) }; }
+function newResource(section, title, unitLabel, count, effort, kit) { return { id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, section, source: "", title, unitLabel, count, ...(effort ? { effort } : {}), ...(kit ? { kit } : {}) }; }
 function resourceTitle(resource) { return [resource.source, resource.title].filter(Boolean).join(" "); }
 
 let contentAddSection = null;
@@ -680,7 +711,7 @@ document.addEventListener("click", event => {
   const scroll = event.target.closest("[data-scroll]");
   if (scroll) { document.getElementById(scroll.dataset.scroll)?.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
   if (event.target.closest("[data-content-kaplan]")) {
-    Object.entries(RECOMMENDED_SET).forEach(([section, picks]) => picks.forEach(i => { const [name, unit, count, effort] = CONTENT_OPTIONS[section][i]; state.content.resources.push(newResource(section, optionName(name), unit, count, effort)); }));
+    Object.entries(RECOMMENDED_SET).forEach(([section, picks]) => picks.forEach(i => { const [name, unit, count, effort, kit] = CONTENT_OPTIONS[section][i]; state.content.resources.push(newResource(section, optionName(name), unit, count, effort, kit)); }));
     refreshSetup("Recommended setup added."); return;
   }
   const open = event.target.closest("[data-open-add]");
@@ -696,7 +727,7 @@ document.addEventListener("click", event => {
     if (!name) return showToast("Give it a name.");
     if (count < 1) return showToast("Enter how many there are.");
     const unit = form.querySelector("[data-unit]").value;
-    state.content.resources.push(newResource(section, name, unit, count, option && option[1] === unit ? option[3] : undefined));
+    state.content.resources.push(newResource(section, name, unit, count, option && option[1] === unit ? option[3] : undefined, option && option[1] === unit ? option[4] : undefined));
     contentAddSection = null; refreshSetup(`Added ${name}.`); return;
   }
   const remove = event.target.closest("[data-remove-resource]");
