@@ -40,6 +40,7 @@
         <span class="splash-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path pathLength="1" d="M3 12h4l3-8 4 16 3-8h4"/></svg></span>
         <span class="splash-text"><b class="splash-big" data-write>MCAT Planner</b></span>
       </div>
+      <p class="splash-greeting"><span class="sg-hello"></span> <span class="sg-doc">Future Doctor</span></p>
     </div>
   </div>
   <script>
@@ -54,10 +55,12 @@
       var ecg = splash.querySelector(".splash-ecg"), mark = splash.querySelector(".splash-mark"), stage = splash.querySelector(".splash-stage");
       var dx = (mark.getBoundingClientRect().left + mark.offsetWidth / 2) - (stage.getBoundingClientRect().left + stage.offsetWidth / 2);
       if (window.innerWidth > 640) { ecg.style.left = dx + "px"; ecg.style.right = -dx + "px"; }
+      var hour = new Date().getHours();
+      splash.querySelector(".sg-hello").textContent = (hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening") + ",";
       try { sessionStorage.setItem("mcat-splash", "1"); } catch (e) {}
       var done = false;
       function finish() { if (done) return; done = true; splash.classList.add("leaving"); setTimeout(function () { splash.remove(); }, 550); }
-      setTimeout(finish, 2900);
+      setTimeout(finish, 3600);
       splash.addEventListener("click", finish);
       document.addEventListener("keydown", finish, { once: true });
     })();
