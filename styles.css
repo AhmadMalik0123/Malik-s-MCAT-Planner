@@ -815,3 +815,13 @@ html[data-mode="light"] .splash-dot { fill: rgb(var(--a2)); }
 /* clear the notch / status bar when launched from the home screen */
 .topbar { padding-top: max(10px, env(safe-area-inset-top)); padding-left: max(clamp(16px, 3vw, 40px), env(safe-area-inset-left)); padding-right: max(clamp(16px, 3vw, 40px), env(safe-area-inset-right)); }
 @media (max-width: 620px) { .topbar { padding-top: max(8px, env(safe-area-inset-top)); padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); } }
+
+/* ---------- One-tap book sets in Content review ---------- */
+.set-picks { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 16px; }
+.set-picks-label { width: 100%; color: var(--muted); font-size: 12px; font-weight: 600; }
+.set-pick { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 9px 14px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--panel-2); color: var(--ink); text-align: left; transition: transform .2s var(--ease-spring), border-color .15s, background .15s; }
+.set-pick b { font-size: 13px; }
+.set-pick span { color: var(--muted); font-size: 11px; font-weight: 600; }
+.set-pick:hover { transform: translateY(-2px); border-color: rgb(var(--a1) / .6); background: rgb(var(--a1) / .08); }
+@media (max-width: 620px) { .set-pick { flex: 1 1 calc(33% - 8px); padding: 8px 10px; } }
+.ch-tag { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 99px; background: rgb(var(--a1) / .12); color: var(--cyan); font-size: 10px; font-weight: 700; letter-spacing: .03em; vertical-align: 2px; }
