@@ -419,31 +419,19 @@ textarea { resize: vertical; }
   .pace, .pace select { width: 100%; min-width: 0; }
 }
 
-/* ---------- MCAT Krillion card ---------- */
-.krillion { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; align-items: center; text-decoration: none; color: var(--ink); overflow: hidden;
-  background: radial-gradient(120% 140% at 0% 0%, rgba(244, 114, 182, .2), transparent 55%), radial-gradient(120% 140% at 100% 100%, rgba(251, 191, 36, .16), transparent 55%), var(--panel);
-  border-color: rgba(244, 114, 182, .35); }
-.krillion:hover { transform: translateY(-3px) rotate(-.4deg); border-color: rgba(244, 114, 182, .7); box-shadow: 0 16px 40px rgba(0, 0, 0, .35), 0 0 30px rgba(244, 114, 182, .25); }
-.krillion-text { display: grid; gap: 3px; min-width: 0; }
-.krillion-kicker { color: #f9a8d4; font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
-.krillion-text strong { font: 700 20px var(--display); background: linear-gradient(90deg, #f472b6, #fbbf24, #f472b6); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: grad-shift 4s ease-in-out infinite alternate; }
-.krillion-text > span:nth-child(3) { font-size: 13px; color: var(--ink); }
-.krillion-sub { font-size: 11px; color: var(--muted); }
-.krillion-sub em { font-style: normal; color: #fcd34d; font-weight: 700; }
-.krillion-go { grid-column: 1 / -1; justify-self: stretch; text-align: center; margin-top: 8px; padding: 9px; border-radius: 10px; background: linear-gradient(90deg, #f472b6, #fbbf24); color: #2a0a17; font-weight: 800; transition: transform .25s var(--ease-spring); }
-.krillion:hover .krillion-go { transform: scale(1.03); }
-.atom { position: relative; width: 62px; height: 62px; flex: none; animation: atom-bob 3s ease-in-out infinite; }
-.krillion:hover .atom { animation: atom-bob 3s ease-in-out infinite, atom-spin 1.2s var(--ease-out); }
-.nucleus { position: absolute; inset: 24px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff7, #f472b6 45%, #be185d); box-shadow: 0 0 14px #f472b6; animation: pulse 1.8s ease-in-out infinite; }
-.orbit { position: absolute; inset: 4px 0; border: 1.5px solid rgba(251, 191, 36, .55); border-radius: 50%; }
-.orbit.o1 { transform: rotate(0deg); } .orbit.o2 { transform: rotate(60deg); } .orbit.o3 { transform: rotate(120deg); }
-.orbit i { position: absolute; top: 50%; left: 50%; width: 7px; height: 7px; margin: -3.5px; border-radius: 50%; background: #fde68a; box-shadow: 0 0 8px #fbbf24; animation: electron-fallback 2.2s linear infinite; }
-.orbit.o2 i { animation-duration: 2.8s; animation-direction: reverse; } .orbit.o3 i { animation-duration: 3.4s; }
-.orbit i { transform-origin: 3.5px 3.5px; }
-@keyframes electron-fallback { from { transform: rotate(0deg) translateX(30px) rotate(0deg) scaleY(1); } to { transform: rotate(360deg) translateX(30px) rotate(-360deg); } }
-@keyframes atom-bob { 50% { transform: translateY(-4px); } }
-@keyframes atom-spin { from { rotate: 0deg; } to { rotate: 360deg; } }
-@keyframes pulse { 50% { transform: scale(1.12); box-shadow: 0 0 22px #f472b6; } }
+/* ---------- MCAT Krillion nav link ---------- */
+.krillion-link { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 7px; margin-left: 4px; padding: 7px 13px; border-radius: 10px; border: 1px solid rgba(244, 114, 182, .45); background: linear-gradient(135deg, rgba(244, 114, 182, .14), rgba(251, 191, 36, .12)); font-size: 13px; font-weight: 700; text-decoration: none; white-space: nowrap; color: #fbcfe8; transition: transform .3s var(--ease-spring), box-shadow .3s, border-color .2s; }
+.krillion-link:hover { transform: translateY(-2px) rotate(-1.5deg); border-color: #f472b6; box-shadow: 0 6px 22px rgba(244, 114, 182, .35); color: #fff; }
+.krillion-link .ext { font-size: 11px; opacity: .7; transition: transform .25s; }
+.krillion-link:hover .ext { transform: translate(2px, -2px); }
+.mini-atom { position: relative; width: 16px; height: 16px; flex: none; }
+.mini-atom::before { content: ""; position: absolute; inset: 5px; border-radius: 50%; background: #f472b6; box-shadow: 0 0 8px #f472b6; animation: pulse 1.8s ease-in-out infinite; }
+.mini-atom i { position: absolute; inset: 3px 0; border: 1.3px solid rgba(251, 191, 36, .8); border-radius: 50%; }
+.mini-atom i:nth-child(2) { transform: rotate(60deg); } .mini-atom i:nth-child(3) { transform: rotate(120deg); }
+.mini-atom { animation: atom-spin 6s linear infinite; }
+.krillion-link:hover .mini-atom { animation-duration: 1.2s; }
+@keyframes atom-spin { to { rotate: 360deg; } }
+@keyframes pulse { 50% { transform: scale(1.2); } }
 
 /* ============================================================
    Motion
@@ -541,7 +529,11 @@ nav button.active { background: transparent; box-shadow: none; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 
 /* ---------- responsive ---------- */
-@media (max-width: 1100px) {
+@media (max-width: 1500px) {
+  .account-meta { display: none; }
+  .nav-util { font-size: 0; gap: 0; padding: 8px 10px; }
+}
+@media (max-width: 1180px) {
   .topbar { flex-wrap: wrap; }
   nav { order: 3; flex-basis: 100%; max-width: none; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; }
   nav::-webkit-scrollbar { display: none; }

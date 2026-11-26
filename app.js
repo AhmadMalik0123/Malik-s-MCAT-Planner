@@ -300,18 +300,10 @@ function renderToday() {
     </section>
     <div class="dashboard">
       <section class="card"><div class="card-head"><h2>Today's checklist</h2>${tasks.length ? `<span class="pill">${doneCount}/${tasks.length}</span>` : ""}</div><div class="stack today-list">${checklist}</div></section>
-      <aside class="right-panel stack"><section class="card countdown"><div class="ring ${donePct === 100 ? "complete" : ""}" style="--pct:${donePct};--from:${lastRingPct}"><div class="ring-value"><strong>${donePct}%</strong><small>${ringLabel}</small></div>${donePct === 100 && lastRingPct < 100 && tasks.length ? burstMarkup() : ""}</div></section>${krillionCard(donePct, tasks.length)}<section class="card"><h2>Question progress</h2>${progressMarkup("UWorld", TOTALS.uworld)}${progressMarkup("AAMC", TOTALS.aamc)}</section></aside>
+      <aside class="right-panel stack"><section class="card countdown"><div class="ring ${donePct === 100 ? "complete" : ""}" style="--pct:${donePct};--from:${lastRingPct}"><div class="ring-value"><strong>${donePct}%</strong><small>${ringLabel}</small></div>${donePct === 100 && lastRingPct < 100 && tasks.length ? burstMarkup() : ""}</div></section><section class="card"><h2>Question progress</h2>${progressMarkup("UWorld", TOTALS.uworld)}${progressMarkup("AAMC", TOTALS.aamc)}</section></aside>
     </div>`;
   lastRingPct = donePct;
   justToggled = null;
-}
-function krillionCard(donePct, taskCount) {
-  const line = taskCount && donePct === 100 ? "Checklist done — you earned a round! 🎉" : donePct >= 50 ? "Halfway there. Quick brain break?" : "Warm up with a quick round before you start.";
-  return `<a class="card krillion" href="https://mcatkrillion.netlify.app" target="_blank" rel="noopener">
-    <div class="atom" aria-hidden="true"><span class="nucleus"></span><span class="orbit o1"><i></i></span><span class="orbit o2"><i></i></span><span class="orbit o3"><i></i></span></div>
-    <div class="krillion-text"><span class="krillion-kicker">Study break</span><strong>MCAT Krillion</strong><span>${line}</span><span class="krillion-sub">7 prompts · name as many as you can · chase a <em>One in a 528-ion</em></span></div>
-    <span class="krillion-go">Play ↗</span>
-  </a>`;
 }
 function burstMarkup() {
   const colors = ["var(--cyan)", "var(--violet)", "var(--uw-bb)", "var(--anki)", "var(--aamc-independent)", "var(--uw-cp)"];
